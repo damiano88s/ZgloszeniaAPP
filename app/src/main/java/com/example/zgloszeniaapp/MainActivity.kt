@@ -56,6 +56,55 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.imePadding
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.ui.platform.LocalContext
+
+
+import android.net.Uri
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+
+
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
+
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.ImageDecoder
+
+import android.os.Build
+import android.provider.MediaStore
+
+import java.io.File
+
+import android.graphics.BitmapFactory
+import androidx.core.content.FileProvider
 
 
 
@@ -64,30 +113,74 @@ import androidx.compose.foundation.layout.imePadding
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
+            }
+        }
+
+
         setContent { AppScreen() }
     }
 }
+
+private var currentPhotoUri: Uri? = null
+private val TAKE_PHOTO_REQUEST = 1
+
 
 @Composable
 fun AppScreen() {
     val context = LocalContext.current
 
+    // Formularz
     var userName by remember { mutableStateOf(UserPrefs.getName(context) ?: "") }
     val userId = remember { UserPrefs.getOrCreateUuid(context) }
-
-    // Pola formularza
-    var typ by remember { mutableStateOf<String?>(null) } // "Gabaryty" / "Zlecenia"
+    var typ by remember { mutableStateOf<String?>(null) }
     var adres by remember { mutableStateOf("") }
     var opis by remember { mutableStateOf("") }
 
-    // 3 zdjęcia (bitmapy + base64)
+    // 3 zdjęcia (każde: File + Bitmap + Base64)
+    var photoFile1 by remember { mutableStateOf<File?>(null) }
     var photoBitmap1 by remember { mutableStateOf<Bitmap?>(null) }
-    var photoBitmap2 by remember { mutableStateOf<Bitmap?>(null) }
-    var photoBitmap3 by remember { mutableStateOf<Bitmap?>(null) }
-
     var photoBase641 by remember { mutableStateOf<String?>(null) }
+
+    var photoFile2 by remember { mutableStateOf<File?>(null) }
+    var photoBitmap2 by remember { mutableStateOf<Bitmap?>(null) }
     var photoBase642 by remember { mutableStateOf<String?>(null) }
+
+    var photoFile3 by remember { mutableStateOf<File?>(null) }
+    var photoBitmap3 by remember { mutableStateOf<Bitmap?>(null) }
     var photoBase643 by remember { mutableStateOf<String?>(null) }
+
+    // Launchery dla 3 zdjęć
+    val takePictureLauncher1 = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && photoFile1 != null) {
+            val bitmap = BitmapFactory.decodeFile(photoFile1!!.absolutePath)
+            photoBitmap1 = bitmap
+            photoBase641 = bitmapToBase64(bitmap)
+        }
+    }
+    val takePictureLauncher2 = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && photoFile2 != null) {
+            val bitmap = BitmapFactory.decodeFile(photoFile2!!.absolutePath)
+            photoBitmap2 = bitmap
+            photoBase642 = bitmapToBase64(bitmap)
+        }
+    }
+    val takePictureLauncher3 = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && photoFile3 != null) {
+            val bitmap = BitmapFactory.decodeFile(photoFile3!!.absolutePath)
+            photoBitmap3 = bitmap
+            photoBase643 = bitmapToBase64(bitmap)
+        }
+    }
 
     var isSending by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -102,26 +195,6 @@ fun AppScreen() {
         )
     }
 
-    // --- 3 launchery aparatu (po jednym na slot) ---
-    val launcher1 = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bm: Bitmap? ->
-        photoBitmap1 = bm
-        photoBase641 = bm?.let { bitmapToBase64(it) }
-    }
-    val launcher2 = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bm: Bitmap? ->
-        photoBitmap2 = bm
-        photoBase642 = bm?.let { bitmapToBase64(it) }
-    }
-    val launcher3 = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bm: Bitmap? ->
-        photoBitmap3 = bm
-        photoBase643 = bm?.let { bitmapToBase64(it) }
-    }
-
     Scaffold { padding ->
         val scroll = rememberScrollState()
         Column(
@@ -129,8 +202,8 @@ fun AppScreen() {
                 .padding(padding)
                 .padding(16.dp)
                 .fillMaxSize()
-                .verticalScroll(scroll)      // 👈 DODAJ
-                .imePadding(),               // klawiatura nie zasłania pól
+                .verticalScroll(scroll)
+                .imePadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
@@ -177,32 +250,101 @@ fun AppScreen() {
                     .heightIn(min = 80.dp)
             )
 
-            // --- 3 sloty zdjęć ---
+            // --- Sloty zdjęć ---
             Spacer(Modifier.height(8.dp))
             PhotoSlot(
                 label = "Zdjęcie 1",
                 bitmap = photoBitmap1,
-                onTake = { launcher1.launch(null) },
-                onRetake = { launcher1.launch(null) },
-                onClear = { photoBitmap1 = null; photoBase641 = null }
+                onTake = {
+                    val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    photoFile1 = file
+                    takePictureLauncher1.launch(uri)
+                },
+                onRetake = {
+                    val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    photoFile1 = file
+                    takePictureLauncher1.launch(uri)
+                },
+                onClear = {
+                    photoBitmap1 = null
+                    photoBase641 = null
+                    photoFile1?.delete()
+                    photoFile1 = null
+                }
             )
 
             Spacer(Modifier.height(8.dp))
             PhotoSlot(
                 label = "Zdjęcie 2",
                 bitmap = photoBitmap2,
-                onTake = { launcher2.launch(null) },
-                onRetake = { launcher2.launch(null) },
-                onClear = { photoBitmap2 = null; photoBase642 = null }
+                onTake = {
+                    val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    photoFile2 = file
+                    takePictureLauncher2.launch(uri)
+                },
+                onRetake = {
+                    val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    photoFile2 = file
+                    takePictureLauncher2.launch(uri)
+                },
+                onClear = {
+                    photoBitmap2 = null
+                    photoBase642 = null
+                    photoFile2?.delete()
+                    photoFile2 = null
+                }
             )
 
             Spacer(Modifier.height(8.dp))
             PhotoSlot(
                 label = "Zdjęcie 3",
                 bitmap = photoBitmap3,
-                onTake = { launcher3.launch(null) },
-                onRetake = { launcher3.launch(null) },
-                onClear = { photoBitmap3 = null; photoBase643 = null }
+                onTake = {
+                    val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    photoFile3 = file
+                    takePictureLauncher3.launch(uri)
+                },
+                onRetake = {
+                    val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    photoFile3 = file
+                    takePictureLauncher3.launch(uri)
+                },
+                onClear = {
+                    photoBitmap3 = null
+                    photoBase643 = null
+                    photoFile3?.delete()
+                    photoFile3 = null
+                }
             )
 
             Spacer(Modifier.height(12.dp))
@@ -257,13 +399,16 @@ fun AppScreen() {
                         payload = payload
                     ) { ok, msg ->
                         isSending = false
-                        message = msg
+                        message = if (ok) "OK" else "Błąd: $msg"
+
                         if (ok) {
+                            // wyczyść formularz i zdjęcia
                             adres = ""
                             opis = ""
-                            photoBitmap1 = null; photoBase641 = null
-                            photoBitmap2 = null; photoBase642 = null
-                            photoBitmap3 = null; photoBase643 = null
+                            // Usuwanie plików i czyszczenie zmiennych
+                            photoBitmap1 = null; photoBase641 = null; photoFile1?.delete(); photoFile1 = null
+                            photoBitmap2 = null; photoBase642 = null; photoFile2?.delete(); photoFile2 = null
+                            photoBitmap3 = null; photoBase643 = null; photoFile3?.delete(); photoFile3 = null
                         }
                     }
                 },
@@ -272,10 +417,46 @@ fun AppScreen() {
                 Text(if (isSending) "Wysyłanie..." else "Wyślij")
             }
 
-            if (message != null) {
-                Text(message!!, style = MaterialTheme.typography.bodyMedium)
+            if (message == "OK") {
+                SuccessBanner("Zgłoszenie zostało wysłane ✅")
+                LaunchedEffect(message) {
+                    kotlinx.coroutines.delay(2500)
+                    message = null
+                }
+            } else if (message != null) {
+                Text(
+                    message!!,
+                    color = Color(0xFFB00020),
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
+    }
+}
+
+
+
+@Composable
+fun SuccessBanner(text: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFE8F5E9))      // jasna zieleń tła
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.CheckCircle,
+            contentDescription = null,
+            tint = Color(0xFF2E7D32)            // ciemna zieleń ikonki
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = text,
+            color = Color(0xFF2E7D32),
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }
 
@@ -302,15 +483,43 @@ fun NameDialog(onSave: (String) -> Unit) {
     )
 }
 
+
+
 class SendVm : ViewModel() {
+    private val client = OkHttpClient.Builder()
+        .callTimeout(60, TimeUnit.SECONDS)     // cały call max 60s
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .build()
+
     fun send(
         url: String,
         payload: JSONObject,
         onDone: (Boolean, String) -> Unit
-    ) = viewModelScope.launch {
-        val result = postJson(url, payload)
-        onDone(result.first, result.second)
+    ) {
+        val jsonString = payload.toString()
+        val body = jsonString.toRequestBody("application/json; charset=utf-8".toMediaType())
+
+        val req = Request.Builder()
+            .url(url)
+            .post(body)
+            .build()
+
+        client.newCall(req).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                onDone(false, "Błąd sieci: ${e.message}")
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    val msg = it.body?.string() ?: ""
+                    onDone(it.isSuccessful, msg)
+                }
+            }
+        })
     }
+}
 
     private suspend fun postJson(url: String, json: JSONObject): Pair<Boolean, String> {
         return withContext(Dispatchers.IO) {
@@ -340,7 +549,7 @@ class SendVm : ViewModel() {
             }
         }
     }
-}
+
 
 fun buildJson(
     typ: String,
@@ -429,6 +638,39 @@ fun PhotoSlot(
             }
         }
     }
+
 }
+
+// Tworzy docelowy Uri w MediaStore – aparat zapisze tu PEŁNE zdjęcie (nie miniaturę).
+fun uriToBase64Jpeg(context: Context, uri: Uri): Pair<String, Bitmap?> {
+    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
+    Log.d("PHOTO_SIZE", "Photo size: ${bytes.size / 1024} KB")
+    val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+    val preview: Bitmap? = try {
+        if (Build.VERSION.SDK_INT >= 28) {
+            val src = ImageDecoder.createSource(context.contentResolver, uri)
+            ImageDecoder.decodeBitmap(src) { decoder, info, _ ->
+                val ow = info.size.width
+                val oh = info.size.height
+                val maxSide = 1280f
+                val scale = minOf(maxSide / ow, maxSide / oh, 1f)
+                val tw = (ow * scale).toInt().coerceAtLeast(1)
+                val th = (oh * scale).toInt().coerceAtLeast(1)
+                decoder.setTargetSize(tw, th)
+            }
+        } else null
+    } catch (e: Exception) {
+        Log.w("PHOTO_PREVIEW", "Preview decode failed: ${e.message}")
+        null
+    }
+    return base64 to preview
+}
+
+
+fun createImageFile(context: Context, fileName: String): File {
+    val storageDir = context.cacheDir
+    return File.createTempFile(fileName, ".jpg", storageDir)
+}
+
 
 
