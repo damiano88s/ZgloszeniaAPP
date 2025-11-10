@@ -106,8 +106,12 @@ import java.io.File
 import android.graphics.BitmapFactory
 import androidx.core.content.FileProvider
 
+import androidx.compose.ui.window.Dialog
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.runtime.saveable.rememberSaveable
 
-
+import android.graphics.Matrix
+import android.media.ExifInterface
 
 
 class MainActivity : ComponentActivity() {
@@ -134,53 +138,63 @@ fun AppScreen() {
     val context = LocalContext.current
 
     // Formularz
-    var userName by remember { mutableStateOf(UserPrefs.getName(context) ?: "") }
-    val userId = remember { UserPrefs.getOrCreateUuid(context) }
-    var typ by remember { mutableStateOf<String?>(null) }
-    var adres by remember { mutableStateOf("") }
-    var opis by remember { mutableStateOf("") }
+    var userName by rememberSaveable { mutableStateOf(UserPrefs.getName(context) ?: "") }
+    val userId = remember { UserPrefs.getOrCreateUuid(context) } // tu wystarczy zwykłe remember
+    var typ by rememberSaveable { mutableStateOf<String?>(null) }
+    var adres by rememberSaveable { mutableStateOf("") }
+    var opis by rememberSaveable { mutableStateOf("") }
 
-    // 3 zdjęcia (każde: File + Bitmap + Base64)
-    var photoFile1 by remember { mutableStateOf<File?>(null) }
-    var photoBitmap1 by remember { mutableStateOf<Bitmap?>(null) }
     var photoBase641 by remember { mutableStateOf<String?>(null) }
-
-    var photoFile2 by remember { mutableStateOf<File?>(null) }
-    var photoBitmap2 by remember { mutableStateOf<Bitmap?>(null) }
     var photoBase642 by remember { mutableStateOf<String?>(null) }
-
-    var photoFile3 by remember { mutableStateOf<File?>(null) }
-    var photoBitmap3 by remember { mutableStateOf<Bitmap?>(null) }
     var photoBase643 by remember { mutableStateOf<String?>(null) }
 
+// Bitmapy i File przechowuj przez zwykłe remember, np:
+    var photoFile1 by remember { mutableStateOf<File?>(null) }
+    var photoBitmap1 by remember { mutableStateOf<Bitmap?>(null) }
+    var photoFile2 by remember { mutableStateOf<File?>(null) }
+    var photoBitmap2 by remember { mutableStateOf<Bitmap?>(null) }
+    var photoFile3 by remember { mutableStateOf<File?>(null) }
+    var photoBitmap3 by remember { mutableStateOf<Bitmap?>(null) }
+
+
     // Launchery dla 3 zdjęć
+    // Launchery dla 3 zdjęć – poprawione!
     val takePictureLauncher1 = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
+        Log.d("ZDJECIE1", "TakePicture1 success=$success, file=${photoFile1?.absolutePath}")
         if (success && photoFile1 != null) {
-            val bitmap = BitmapFactory.decodeFile(photoFile1!!.absolutePath)
+            val bitmapRaw = BitmapFactory.decodeFile(photoFile1!!.absolutePath)
+            val bitmap = rotateBitmapIfRequired(bitmapRaw, photoFile1!!)
             photoBitmap1 = bitmap
             photoBase641 = bitmapToBase64(bitmap)
         }
     }
+
     val takePictureLauncher2 = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
+        Log.d("ZDJECIE2", "TakePicture2 success=$success, file=${photoFile2?.absolutePath}")
         if (success && photoFile2 != null) {
-            val bitmap = BitmapFactory.decodeFile(photoFile2!!.absolutePath)
+            val bitmapRaw = BitmapFactory.decodeFile(photoFile2!!.absolutePath)
+            val bitmap = rotateBitmapIfRequired(bitmapRaw, photoFile2!!)
             photoBitmap2 = bitmap
             photoBase642 = bitmapToBase64(bitmap)
         }
     }
+
     val takePictureLauncher3 = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
+        Log.d("ZDJECIE3", "TakePicture3 success=$success, file=${photoFile3?.absolutePath}")
         if (success && photoFile3 != null) {
-            val bitmap = BitmapFactory.decodeFile(photoFile3!!.absolutePath)
+            val bitmapRaw = BitmapFactory.decodeFile(photoFile3!!.absolutePath)
+            val bitmap = rotateBitmapIfRequired(bitmapRaw, photoFile3!!)
             photoBitmap3 = bitmap
             photoBase643 = bitmapToBase64(bitmap)
         }
     }
+
 
     var isSending by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -608,7 +622,6 @@ fun PhotoSlot(
                 contentScale = ContentScale.Crop
             )
 
-
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -617,29 +630,45 @@ fun PhotoSlot(
                 OutlinedButton(onClick = onClear, modifier = Modifier.weight(1f)) { Text("Usuń") }
             }
 
+            // PODGLĄD NA CAŁYM EKRANIE
             if (showFull) {
-                AlertDialog(
-                    onDismissRequest = { showFull = false },
-                    confirmButton = {
-                        TextButton(onClick = { showFull = false }) { Text("Zamknij") }
-                    },
-                    text = {
+                Dialog(onDismissRequest = { showFull = false }) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(Color.Black)
+                            .clickable { showFull = false },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Automatycznie dobiera proporcje
                         Image(
                             bitmap = bitmap.asImageBitmap(),
                             contentDescription = null,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 240.dp),
+                                .fillMaxHeight(), // dodałem
                             contentScale = ContentScale.Fit
                         )
-
+                        IconButton(
+                            onClick = { showFull = false },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(16.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Zamknij",
+                                tint = Color.White
+                            )
+                        }
                     }
-                )
+                }
             }
         }
-    }
 
+    }
 }
+
 
 // Tworzy docelowy Uri w MediaStore – aparat zapisze tu PEŁNE zdjęcie (nie miniaturę).
 fun uriToBase64Jpeg(context: Context, uri: Uri): Pair<String, Bitmap?> {
@@ -672,5 +701,30 @@ fun createImageFile(context: Context, fileName: String): File {
     return File.createTempFile(fileName, ".jpg", storageDir)
 }
 
+fun rotateBitmapIfRequired(bitmap: Bitmap, file: File): Bitmap {
+    val ei = ExifInterface(file.absolutePath)
+    val orientation = ei.getAttributeInt(
+        ExifInterface.TAG_ORIENTATION,
+        ExifInterface.ORIENTATION_UNDEFINED
+    )
 
+    return when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> {
+            val matrix = Matrix()
+            matrix.postRotate(90f)
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        }
+        ExifInterface.ORIENTATION_ROTATE_180 -> {
+            val matrix = Matrix()
+            matrix.postRotate(180f)
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        }
+        ExifInterface.ORIENTATION_ROTATE_270 -> {
+            val matrix = Matrix()
+            matrix.postRotate(270f)
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        }
+        else -> bitmap
+    }
+}
 
