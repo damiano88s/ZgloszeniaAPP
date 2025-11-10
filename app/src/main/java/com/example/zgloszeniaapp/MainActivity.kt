@@ -269,6 +269,7 @@ fun AppScreen() {
             PhotoSlot(
                 label = "Zdjęcie 1",
                 bitmap = photoBitmap1,
+                photoFile = photoFile1,
                 onTake = {
                     val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
                     val uri = FileProvider.getUriForFile(
@@ -301,6 +302,7 @@ fun AppScreen() {
             PhotoSlot(
                 label = "Zdjęcie 2",
                 bitmap = photoBitmap2,
+                photoFile = photoFile2,
                 onTake = {
                     val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
                     val uri = FileProvider.getUriForFile(
@@ -333,6 +335,7 @@ fun AppScreen() {
             PhotoSlot(
                 label = "Zdjęcie 3",
                 bitmap = photoBitmap3,
+                photoFile = photoFile3,
                 onTake = {
                     val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
                     val uri = FileProvider.getUriForFile(
@@ -597,11 +600,13 @@ fun bitmapToBase64(bitmap: Bitmap): String {
 fun PhotoSlot(
     label: String,
     bitmap: Bitmap?,
+    photoFile: File?,
     onTake: () -> Unit,
     onRetake: () -> Unit,
     onClear: () -> Unit
 ) {
     var showFull by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
@@ -618,9 +623,18 @@ fun PhotoSlot(
                     .fillMaxWidth()
                     .height(180.dp)
                     .clip(MaterialTheme.shapes.medium)
-                    .clickable { showFull = true },
+                    .clickable {
+
+                        if (photoFile != null) {
+                            val intent = Intent(context, PhotoViewActivity::class.java)
+                            intent.putExtra("photo_path", photoFile.absolutePath)
+                            context.startActivity(intent)
+                        }
+                    }
+                ,
                 contentScale = ContentScale.Crop
             )
+
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
