@@ -14,33 +14,40 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import java.io.File
 
 class PhotoViewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val filePath = intent.getStringExtra("photo_path")
-        val bitmap = filePath?.let { BitmapFactory.decodeFile(it) }
+        val path = intent.getStringExtra("photo_path")
+        if (path.isNullOrEmpty()) { finish(); return }
+
+        // Wczytujemy bitmapę w ROZMIAR EKRANU (bez kompresji pliku, tylko podgląd)
+        val maxSide = screenMaxSide(this)
+
+        val preview = decodeSampledBitmapFromFile(path, maxSide) ?: run {
+            finish(); return
+        }
+        val rotated = rotateBitmapIfRequired(preview, File(path))
 
         setContent {
+            // Pełny ekran, tap = zamknij (nic nie kasujemy)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black)
-                    .clickable { finish() },
+                    .background(Color.Black),
                 contentAlignment = Alignment.Center
-            ) {
-                bitmap?.let {
-                    Image(
-                        bitmap = it.asImageBitmap(),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                            .padding(8.dp)
-                    )
-                }
+            )
+            {
+                Image(
+                    bitmap = rotated.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
             }
         }
     }

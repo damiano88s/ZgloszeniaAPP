@@ -112,94 +112,122 @@ import androidx.compose.runtime.saveable.rememberSaveable
 
 import android.graphics.Matrix
 import android.media.ExifInterface
+import androidx.compose.ui.zIndex
+
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.platform.LocalFocusManager
+
 
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Czyść dane drafta przy każdym uruchomieniu aplikacji:
+        applicationContext.clearDraft()   // <<< DODAJ TO!
+
+        // Czyść pliki zdjęć
+        clearPhotoCacheFiles()
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
                 requestPermissions(arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE), 1)
             }
         }
 
-
         setContent { AppScreen() }
+    }
+
+
+    // Funkcja czyści wszystkie pliki zaczynające się od "photo" z folderu cache
+    private fun clearPhotoCacheFiles() {
+        val cacheDir = cacheDir
+        cacheDir?.listFiles()?.forEach { file ->
+            if (file.name.startsWith("photo")) file.delete()
+        }
     }
 }
 
-private var currentPhotoUri: Uri? = null
-private val TAKE_PHOTO_REQUEST = 1
 
 
 @Composable
 fun AppScreen() {
+    val focusManager = LocalFocusManager.current
     val context = LocalContext.current
-
-    // Formularz
+    val draft = remember { context.loadDraft() }
     var userName by rememberSaveable { mutableStateOf(UserPrefs.getName(context) ?: "") }
-    val userId = remember { UserPrefs.getOrCreateUuid(context) } // tu wystarczy zwykłe remember
-    var typ by rememberSaveable { mutableStateOf<String?>(null) }
-    var adres by rememberSaveable { mutableStateOf("") }
-    var opis by rememberSaveable { mutableStateOf("") }
+    val userId = remember { UserPrefs.getOrCreateUuid(context) }
 
-    var photoBase641 by remember { mutableStateOf<String?>(null) }
-    var photoBase642 by remember { mutableStateOf<String?>(null) }
-    var photoBase643 by remember { mutableStateOf<String?>(null) }
+    var typ by rememberSaveable { mutableStateOf<String?>(draft.typ) }
+    var adres by rememberSaveable { mutableStateOf(draft.adres) }
+    var opis by rememberSaveable { mutableStateOf(draft.opis) }
 
-// Bitmapy i File przechowuj przez zwykłe remember, np:
-    var photoFile1 by remember { mutableStateOf<File?>(null) }
+    var photoFile1Path by rememberSaveable { mutableStateOf<String?>(null) }
     var photoBitmap1 by remember { mutableStateOf<Bitmap?>(null) }
-    var photoFile2 by remember { mutableStateOf<File?>(null) }
+    var photoFile2Path by rememberSaveable { mutableStateOf<String?>(null) }
     var photoBitmap2 by remember { mutableStateOf<Bitmap?>(null) }
-    var photoFile3 by remember { mutableStateOf<File?>(null) }
+    var photoFile3Path by rememberSaveable { mutableStateOf<String?>(null) }
     var photoBitmap3 by remember { mutableStateOf<Bitmap?>(null) }
 
-
-    // Launchery dla 3 zdjęć
-    // Launchery dla 3 zdjęć – poprawione!
     val takePictureLauncher1 = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        Log.d("ZDJECIE1", "TakePicture1 success=$success, file=${photoFile1?.absolutePath}")
-        if (success && photoFile1 != null) {
-            val bitmapRaw = BitmapFactory.decodeFile(photoFile1!!.absolutePath)
-            val bitmap = rotateBitmapIfRequired(bitmapRaw, photoFile1!!)
-            photoBitmap1 = bitmap
-            photoBase641 = bitmapToBase64(bitmap)
+        if (success && photoFile1Path != null) {
+            photoBitmap1 = decodeSampledBitmapFromFile(photoFile1Path!!, maxSide = 2048)
         }
     }
-
     val takePictureLauncher2 = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        Log.d("ZDJECIE2", "TakePicture2 success=$success, file=${photoFile2?.absolutePath}")
-        if (success && photoFile2 != null) {
-            val bitmapRaw = BitmapFactory.decodeFile(photoFile2!!.absolutePath)
-            val bitmap = rotateBitmapIfRequired(bitmapRaw, photoFile2!!)
-            photoBitmap2 = bitmap
-            photoBase642 = bitmapToBase64(bitmap)
+        if (success && photoFile2Path != null) {
+            photoBitmap2 = decodeSampledBitmapFromFile(photoFile2Path!!, maxSide = 2048)
         }
     }
-
     val takePictureLauncher3 = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
-        Log.d("ZDJECIE3", "TakePicture3 success=$success, file=${photoFile3?.absolutePath}")
-        if (success && photoFile3 != null) {
-            val bitmapRaw = BitmapFactory.decodeFile(photoFile3!!.absolutePath)
-            val bitmap = rotateBitmapIfRequired(bitmapRaw, photoFile3!!)
-            photoBitmap3 = bitmap
-            photoBase643 = bitmapToBase64(bitmap)
+        if (success && photoFile3Path != null) {
+            photoBitmap3 = decodeSampledBitmapFromFile(photoFile3Path!!, maxSide = 2048)
+        }
+    }
+
+    var isSending by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var showBanner by remember { mutableStateOf(false) }
+
+    if (message != null) Log.d("MESSAGE_DEBUG", "Current message: $message")
+
+    // Automatyczne czyszczenie formularza i późniejsze znikanie banera
+    LaunchedEffect(showBanner, message) {
+        if (showBanner && message == "OK") {
+            // Najpierw od razu wyczyść formularz:
+            adres = ""
+            opis = ""
+            photoBitmap1 = null
+            photoFile1Path?.let { runCatching { File(it).delete() } }
+            photoFile1Path = null
+            photoBitmap2 = null
+            photoFile2Path?.let { runCatching { File(it).delete() } }
+            photoFile2Path = null
+            photoBitmap3 = null
+            photoFile3Path?.let { runCatching { File(it).delete() } }
+            photoFile3Path = null
+            context.clearDraft()
+
+            // Potem zostaw baner na ekranie jeszcze przez 1 sekundę:
+            kotlinx.coroutines.delay(3000)
+
+            // I schowaj baner
+            message = null
+            showBanner = false
         }
     }
 
 
-    var isSending by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-
-    // Imię i nazwisko przy pierwszym uruchomieniu
     if (userName.isBlank()) {
         NameDialog(
             onSave = {
@@ -209,247 +237,275 @@ fun AppScreen() {
         )
     }
 
-    Scaffold { padding ->
+    Scaffold { padding ->    // JEDYNY Scaffold!
         val scroll = rememberScrollState()
-        Column(
+        Box(
             modifier = Modifier
-                .padding(padding)
-                .padding(16.dp)
                 .fillMaxSize()
-                .verticalScroll(scroll)
-                .imePadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(padding)
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = {
+                        focusManager.clearFocus()
+                    })
+                }
         ) {
-            Text(
-                "Zgłoszenia",
-                style = MaterialTheme.typography.titleLarge,
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                textAlign = TextAlign.Center
-            )
-
-            // Przełącznik typu
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = typ == Config.SHEET_GABARYTY,
-                    onClick = { typ = Config.SHEET_GABARYTY }
-                )
-                Text("Gabaryty", modifier = Modifier.padding(end = 16.dp))
-
-                RadioButton(
-                    selected = typ == Config.SHEET_ZLECENIA,
-                    onClick = { typ = Config.SHEET_ZLECENIA }
-                )
-                Text("Zlecenie")
-            }
-
-            // Adres
-            OutlinedTextField(
-                value = adres,
-                onValueChange = { adres = it },
-                label = { Text("Adres") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // Opis
-            OutlinedTextField(
-                value = opis,
-                onValueChange = { opis = it },
-                label = { Text("Opis") },
-                minLines = 3,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 80.dp)
-            )
-
-            // --- Sloty zdjęć ---
-            Spacer(Modifier.height(8.dp))
-            PhotoSlot(
-                label = "Zdjęcie 1",
-                bitmap = photoBitmap1,
-                photoFile = photoFile1,
-                onTake = {
-                    val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                    photoFile1 = file
-                    takePictureLauncher1.launch(uri)
-                },
-                onRetake = {
-                    val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                    photoFile1 = file
-                    takePictureLauncher1.launch(uri)
-                },
-                onClear = {
-                    photoBitmap1 = null
-                    photoBase641 = null
-                    photoFile1?.delete()
-                    photoFile1 = null
-                }
-            )
-
-            Spacer(Modifier.height(8.dp))
-            PhotoSlot(
-                label = "Zdjęcie 2",
-                bitmap = photoBitmap2,
-                photoFile = photoFile2,
-                onTake = {
-                    val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                    photoFile2 = file
-                    takePictureLauncher2.launch(uri)
-                },
-                onRetake = {
-                    val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                    photoFile2 = file
-                    takePictureLauncher2.launch(uri)
-                },
-                onClear = {
-                    photoBitmap2 = null
-                    photoBase642 = null
-                    photoFile2?.delete()
-                    photoFile2 = null
-                }
-            )
-
-            Spacer(Modifier.height(8.dp))
-            PhotoSlot(
-                label = "Zdjęcie 3",
-                bitmap = photoBitmap3,
-                photoFile = photoFile3,
-                onTake = {
-                    val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                    photoFile3 = file
-                    takePictureLauncher3.launch(uri)
-                },
-                onRetake = {
-                    val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                    photoFile3 = file
-                    takePictureLauncher3.launch(uri)
-                },
-                onClear = {
-                    photoBitmap3 = null
-                    photoBase643 = null
-                    photoFile3?.delete()
-                    photoFile3 = null
-                }
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            // Przycisk Wyślij
-            val vm = remember { SendVm() }
-            Button(
-                enabled = !isSending &&
-                        userName.isNotBlank() &&
-                        adres.trim().length >= 3 &&
-                        (photoBase641 != null || photoBase642 != null || photoBase643 != null),
-                onClick = {
-                    if (typ == null) {
-                        message = "Zaznacz typ zgłoszenia"
-                        return@Button
-                    }
-
-                    isSending = true
-                    message = null
-                    Log.d("API_URL", Config.WEB_APP_URL)
-
-                    // JSON z 1–3 zdjęciami (tylko istniejące)
-                    val payload = JSONObject().apply {
-                        put("sekret", Config.SECRET_TOKEN)
-                        put("typ", typ!!)
-                        put("ulica_adres", adres.trim())
-                        put("opis", opis.trim())
-                        put("uzytkownik", userName.trim())
-                        put("urz_uuid", userId)
-                        put("wersja_apki", Config.APP_VERSION)
-                        put("timestamp_client", System.currentTimeMillis())
-
-                        photoBase641?.let {
-                            put("photo1", it)
-                            put("fileName1", "zdjecie1_${System.currentTimeMillis()}.jpg")
-                        }
-                        photoBase642?.let {
-                            put("photo2", it)
-                            put("fileName2", "zdjecie2_${System.currentTimeMillis()}.jpg")
-                        }
-                        photoBase643?.let {
-                            put("photo3", it)
-                            put("fileName3", "zdjecie3_${System.currentTimeMillis()}.jpg")
-                        }
-                    }
-
-                    Log.d("API_DEBUG", "URL: ${Config.WEB_APP_URL}")
-                    Log.d("API_DEBUG", "Payload: $payload")
-
-                    vm.send(
-                        url = Config.WEB_APP_URL,
-                        payload = payload
-                    ) { ok, msg ->
-                        isSending = false
-                        message = if (ok) "OK" else "Błąd: $msg"
-
-                        if (ok) {
-                            // wyczyść formularz i zdjęcia
-                            adres = ""
-                            opis = ""
-                            // Usuwanie plików i czyszczenie zmiennych
-                            photoBitmap1 = null; photoBase641 = null; photoFile1?.delete(); photoFile1 = null
-                            photoBitmap2 = null; photoBase642 = null; photoFile2?.delete(); photoFile2 = null
-                            photoBitmap3 = null; photoBase643 = null; photoFile3?.delete(); photoFile3 = null
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .verticalScroll(scroll)
+                    .imePadding(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(if (isSending) "Wysyłanie..." else "Wyślij")
+                Text(
+                    "Zgłoszenia",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    textAlign = TextAlign.Center
+                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = typ == Config.SHEET_GABARYTY,
+                        onClick = { typ = Config.SHEET_GABARYTY }
+                    )
+                    Text("Gabaryty", modifier = Modifier.padding(end = 16.dp))
+                    RadioButton(
+                        selected = typ == Config.SHEET_ZLECENIA,
+                        onClick = { typ = Config.SHEET_ZLECENIA }
+                    )
+                    Text("Zlecenie")
+                }
+
+                OutlinedTextField(
+                    value = adres,
+                    onValueChange = { adres = it },
+                    label = { Text("Adres") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = opis,
+                    onValueChange = { opis = it },
+                    label = { Text("Opis") },
+                    minLines = 3,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 80.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+                PhotoSlot(
+                    label = "Zdjęcie 1",
+                    bitmap = photoBitmap1,
+                    photoFilePath = photoFile1Path,
+                    onTake = {
+                        val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
+                        val uri = FileProvider.getUriForFile(
+                            context, "${context.packageName}.fileprovider", file
+                        )
+                        photoFile1Path = file.absolutePath
+                        takePictureLauncher1.launch(uri)
+                    },
+                    onRetake = {
+                        val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
+                        val uri = FileProvider.getUriForFile(
+                            context, "${context.packageName}.fileprovider", file
+                        )
+                        photoFile1Path = file.absolutePath
+                        takePictureLauncher1.launch(uri)
+                    },
+                    onClear = {
+                        photoBitmap1 = null
+                        photoFile1Path?.let { path -> runCatching { File(path).delete() } }
+                        photoFile1Path = null
+                    }
+                )
+                Spacer(Modifier.height(8.dp))
+                PhotoSlot(
+                    label = "Zdjęcie 2",
+                    bitmap = photoBitmap2,
+                    photoFilePath = photoFile2Path,
+                    onTake = {
+                        val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
+                        val uri = FileProvider.getUriForFile(
+                            context, "${context.packageName}.fileprovider", file
+                        )
+                        photoFile2Path = file.absolutePath
+                        takePictureLauncher2.launch(uri)
+                    },
+                    onRetake = {
+                        val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
+                        val uri = FileProvider.getUriForFile(
+                            context, "${context.packageName}.fileprovider", file
+                        )
+                        photoFile2Path = file.absolutePath
+                        takePictureLauncher2.launch(uri)
+                    },
+                    onClear = {
+                        photoBitmap2 = null
+                        photoFile2Path?.let { File(it).delete() }
+                        photoFile2Path = null
+                    }
+                )
+                Spacer(Modifier.height(8.dp))
+                PhotoSlot(
+                    label = "Zdjęcie 3",
+                    bitmap = photoBitmap3,
+                    photoFilePath = photoFile3Path,
+                    onTake = {
+                        val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
+                        val uri = FileProvider.getUriForFile(
+                            context, "${context.packageName}.fileprovider", file
+                        )
+                        photoFile3Path = file.absolutePath
+                        takePictureLauncher3.launch(uri)
+                    },
+                    onRetake = {
+                        val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
+                        val uri = FileProvider.getUriForFile(
+                            context, "${context.packageName}.fileprovider", file
+                        )
+                        photoFile3Path = file.absolutePath
+                        takePictureLauncher3.launch(uri)
+                    },
+                    onClear = {
+                        photoBitmap3 = null
+                        photoFile3Path?.let { File(it).delete() }
+                        photoFile3Path = null
+                    }
+                )
+                Spacer(Modifier.height(12.dp))
+                val vm = remember { SendVm() }
+                Button(
+                    enabled = !isSending &&
+                            !showBanner &&
+                            userName.isNotBlank() &&
+                            adres.trim().length >= 3 &&
+                            (
+                                    opis.trim().isNotBlank() ||
+                                            photoFile1Path != null ||
+                                            photoFile2Path != null ||
+                                            photoFile3Path != null
+                                    ),
+                    onClick = {
+                        if (typ == null) {
+                            message = "Zaznacz typ zgłoszenia"
+                            return@Button
+                        }
+                        if (adres.trim().length < 3) {
+                            message = "Podaj poprawny adres"
+                            return@Button
+                        }
+                        if (opis.trim().isBlank() &&
+                            photoFile1Path == null &&
+                            photoFile2Path == null &&
+                            photoFile3Path == null
+                        ) {
+                            message = "Podaj opis lub dodaj zdjęcie"
+                            return@Button
+                        }
+                        isSending = true
+                        message = null
+                        Log.d("API_URL", Config.WEB_APP_URL)
+                        val payload = JSONObject().apply {
+                            put("sekret", Config.SECRET_TOKEN)
+                            put("typ", typ!!)
+                            put("ulica_adres", adres.trim())
+                            put("opis", opis.trim())
+                            put("uzytkownik", userName.trim())
+                            put("urz_uuid", userId)
+                            put("wersja_apki", Config.APP_VERSION)
+                            put("timestamp_client", System.currentTimeMillis())
+                            photoFile1Path?.let { path ->
+                                val f = File(path)
+                                put("photo1", fileToBase64Original(f))
+                                put(
+                                    "fileName1",
+                                    f.name.ifBlank { "zdjecie1_${System.currentTimeMillis()}.jpg" })
+                            }
+                            photoFile2Path?.let { path ->
+                                val f = File(path)
+                                put("photo2", fileToBase64Original(f))
+                                put(
+                                    "fileName2",
+                                    f.name.ifBlank { "zdjecie2_${System.currentTimeMillis()}.jpg" })
+                            }
+                            photoFile3Path?.let { path ->
+                                val f = File(path)
+                                put("photo3", fileToBase64Original(f))
+                                put(
+                                    "fileName3",
+                                    f.name.ifBlank { "zdjecie3_${System.currentTimeMillis()}.jpg" })
+                            }
+                        }
+                        Log.d("API_DEBUG", "URL: ${Config.WEB_APP_URL}")
+                        Log.d(
+                            "API_DEBUG", "Payload keys: " +
+                                    listOfNotNull(
+                                        photoFile1Path?.let { "photo1" },
+                                        photoFile2Path?.let { "photo2" },
+                                        photoFile3Path?.let { "photo3" }
+                                    )
+                        )
+                        vm.send(
+                            url = Config.WEB_APP_URL,
+                            payload = payload
+                        ) { ok, msg ->
+                            isSending = false
+                            Log.d("RESPONSE_DEBUG", "Response message: $msg")
+                            message = if (ok) "OK" else "Błąd: $msg"
+                            showBanner = ok
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (isSending) "Wysyłanie..." else "Wyślij")
+                }
+                Log.d("UI_DEBUG", "Stan message: $message, showBanner: $showBanner")
             }
 
-            if (message == "OK") {
-                SuccessBanner("Zgłoszenie zostało wysłane ✅")
-                LaunchedEffect(message) {
-                    kotlinx.coroutines.delay(2500)
-                    message = null
+            // BANER JEST TU – NA GÓRZE, NAD CAŁYM FORMULARZEM!
+            if (showBanner && message == "OK") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 32.dp)
+                        .zIndex(1f),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    SuccessBanner(
+                        "Zgłoszenie zostało wysłane ✅",
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                    )
                 }
-            } else if (message != null) {
-                Text(
-                    message!!,
-                    color = Color(0xFFB00020),
-                    style = MaterialTheme.typography.bodyMedium
-                )
             }
         }
     }
+
+    LaunchedEffect(showBanner, message) {
+        if (showBanner && message == "OK") {
+            kotlinx.coroutines.delay(2500)
+            adres = ""
+            opis = ""
+            photoBitmap1 = null
+            photoFile1Path?.let { runCatching { File(it).delete() } }
+            photoFile1Path = null
+            photoBitmap2 = null
+            photoFile2Path?.let { runCatching { File(it).delete() } }
+            photoFile2Path = null
+            photoBitmap3 = null
+            photoFile3Path?.let { runCatching { File(it).delete() } }
+            photoFile3Path = null
+            context.clearDraft()
+            message = null
+            showBanner = false
+        }
+    }
 }
+
 
 
 
@@ -504,7 +560,7 @@ fun NameDialog(onSave: (String) -> Unit) {
 
 class SendVm : ViewModel() {
     private val client = OkHttpClient.Builder()
-        .callTimeout(60, TimeUnit.SECONDS)     // cały call max 60s
+        .callTimeout(60, TimeUnit.SECONDS)
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
@@ -536,36 +592,38 @@ class SendVm : ViewModel() {
             }
         })
     }
-}
+} // <-- Poprawnie zamknięta klasa
 
-    private suspend fun postJson(url: String, json: JSONObject): Pair<Boolean, String> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                    doOutput = true
-                    connectTimeout = 10000
-                    readTimeout = 10000
-                }
-                conn.outputStream.use { it.write(json.toString().toByteArray(Charsets.UTF_8)) }
-                val code = conn.responseCode
-                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-                val body = stream?.bufferedReader()?.readText().orEmpty()
-                conn.disconnect()
-
-                android.util.Log.d("API_RESPONSE", "Kod: $code, Body: $body")
-
-                if (code in 200..299 && body.contains("\"status\":\"OK\"")) {
-                    true to "Zapisano ✅"
-                } else {
-                    false to "Błąd serwera: $body"
-                }
-            } catch (e: Exception) {
-                false to "Brak internetu lub błąd: ${e.message}"
+// ↓ Tę funkcję umieszczasz POZA klasą, na tym samym poziomie co inne funkcje
+private suspend fun postJson(url: String, json: JSONObject): Pair<Boolean, String> {
+    return withContext(Dispatchers.IO) {
+        try {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                doOutput = true
+                connectTimeout = 10000
+                readTimeout = 10000
             }
+            conn.outputStream.use { it.write(json.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val body = stream?.bufferedReader()?.readText().orEmpty()
+            conn.disconnect()
+
+            android.util.Log.d("API_RESPONSE", "Kod: $code, Body: $body")
+
+            if (code in 200..299 && body.contains("\"status\":\"OK\"")) {
+                true to "Zapisano ✅"
+            } else {
+                false to "Błąd serwera: $body"
+            }
+        } catch (e: Exception) {
+            false to "Brak internetu lub błąd: ${e.message}"
         }
     }
+}
+
 
 
 fun buildJson(
@@ -596,18 +654,17 @@ fun bitmapToBase64(bitmap: Bitmap): String {
     val byteArray = outputStream.toByteArray()
     return Base64.encodeToString(byteArray, Base64.NO_WRAP)
 }
+
 @Composable
 fun PhotoSlot(
     label: String,
     bitmap: Bitmap?,
-    photoFile: File?,
+    photoFilePath: String?,          // <-- ścieżka do pliku, NIE File
     onTake: () -> Unit,
     onRetake: () -> Unit,
     onClear: () -> Unit
 ) {
-    var showFull by remember { mutableStateOf(false) }
     val context = LocalContext.current
-
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
 
@@ -624,17 +681,15 @@ fun PhotoSlot(
                     .height(180.dp)
                     .clip(MaterialTheme.shapes.medium)
                     .clickable {
-
-                        if (photoFile != null) {
+                        // pokaż pełny ekran jeśli mamy ścieżkę
+                        photoFilePath?.let { path ->
                             val intent = Intent(context, PhotoViewActivity::class.java)
-                            intent.putExtra("photo_path", photoFile.absolutePath)
+                            intent.putExtra("photo_path", path)
                             context.startActivity(intent)
                         }
-                    }
-                ,
+                    },
                 contentScale = ContentScale.Crop
             )
-
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -643,45 +698,10 @@ fun PhotoSlot(
                 Button(onClick = onRetake, modifier = Modifier.weight(1f)) { Text("Zmień") }
                 OutlinedButton(onClick = onClear, modifier = Modifier.weight(1f)) { Text("Usuń") }
             }
-
-            // PODGLĄD NA CAŁYM EKRANIE
-            if (showFull) {
-                Dialog(onDismissRequest = { showFull = false }) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(Color.Black)
-                            .clickable { showFull = false },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Automatycznie dobiera proporcje
-                        Image(
-                            bitmap = bitmap.asImageBitmap(),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight(), // dodałem
-                            contentScale = ContentScale.Fit
-                        )
-                        IconButton(
-                            onClick = { showFull = false },
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(16.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Zamknij",
-                                tint = Color.White
-                            )
-                        }
-                    }
-                }
-            }
         }
-
     }
 }
+
 
 
 // Tworzy docelowy Uri w MediaStore – aparat zapisze tu PEŁNE zdjęcie (nie miniaturę).
@@ -742,3 +762,79 @@ fun rotateBitmapIfRequired(bitmap: Bitmap, file: File): Bitmap {
     }
 }
 
+// ====== DRAFT (auto-zapis formularza) ======
+data class Draft(
+    val typ: String?,
+    val adres: String,
+    val opis: String
+)
+
+object DraftKeys {
+    const val FILE = "form_draft"
+    const val TYP = "typ"
+    const val ADRES = "adres"
+    const val OPIS = "opis"
+
+}
+
+fun Context.saveDraft(d: Draft) {
+    getSharedPreferences(DraftKeys.FILE, Context.MODE_PRIVATE).edit().apply {
+        putString(DraftKeys.TYP, d.typ)
+        putString(DraftKeys.ADRES, d.adres)
+        putString(DraftKeys.OPIS, d.opis)
+    }.apply()
+}
+
+fun Context.loadDraft(): Draft {
+    val sp = getSharedPreferences(DraftKeys.FILE, Context.MODE_PRIVATE)
+    return Draft(
+        typ   = sp.getString(DraftKeys.TYP, null),
+        adres = sp.getString(DraftKeys.ADRES, "") ?: "",
+        opis  = sp.getString(DraftKeys.OPIS, "") ?: ""
+    )
+}
+
+fun Context.clearDraft() {
+    getSharedPreferences(DraftKeys.FILE, Context.MODE_PRIVATE).edit().clear().apply()
+}
+
+// (opcjonalne) szybkie dekodowanie Base64 -> mini podgląd bitmapy
+fun base64ToBitmap(b64: String): Bitmap? = try {
+    val bytes = android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+} catch (_: Exception) { null }
+
+// Odczyt ORYGINALNEGO pliku do Base64 (bez kompresji)
+fun fileToBase64Original(file: java.io.File): String {
+    val bytes = file.readBytes()
+    return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+}
+
+// Lekki podgląd do miniatury (żeby nie zjadało RAM-u). Pełny ekran otwierasz z pliku.
+fun decodeSampledBitmapFromFile(path: String, maxSide: Int = 2048): android.graphics.Bitmap? =
+    try {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(path, bounds)
+        val w = bounds.outWidth
+        val h = bounds.outHeight
+        if (w <= 0 || h <= 0) {
+            null
+        } else {
+            var inSample = 1
+            val bigger = maxOf(w, h)
+            while ((bigger / inSample) > maxSide) inSample *= 2
+            val opts = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = inSample
+                inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+            }
+            android.graphics.BitmapFactory.decodeFile(path, opts)
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+
+fun screenMaxSide(ctx: Context): Int {
+    val dm = ctx.resources.displayMetrics
+    return maxOf(dm.widthPixels, dm.heightPixels)
+}
