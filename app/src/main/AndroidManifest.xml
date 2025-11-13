@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- INTERNET — wymagane do wysyłania zgłoszeń -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ZgloszeniaAPP"
+        tools:targetApi="31">
+
+        <!-- Główna aktywność – na sztywno w pionie -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.ZgloszeniaAPP"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- AKTYWNOŚĆ PODGLĄDU ZDJĘCIA – może się obracać -->
+        <activity
+            android:name=".PhotoViewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ZgloszeniaAPP" />
+        <!-- UWAGA: NIE DAWAJ tu android:screenOrientation! -->
+
+        <!-- FileProvider do obsługi zdjęć -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.example.zgloszeniaapp.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>
