@@ -135,6 +135,10 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.shadow
 
+private const val PHOTOS_ENABLED = false //import wylacza zdjecia
+
+
+
 
 
 
@@ -167,7 +171,16 @@ class MainActivity : ComponentActivity() {
             if (file.name.startsWith("photo")) file.delete()
         }
     }
+
 }
+
+enum class GabarytCategory(val label: String) {
+    ROZNE("różne"),
+    BIO("BIO"),
+    OPONY("opony")
+}
+
+
 
 
 
@@ -181,7 +194,15 @@ fun AppScreen() {
 
     var typ by rememberSaveable { mutableStateOf<String?>(draft.typ) }
     var adres by rememberSaveable { mutableStateOf(draft.adres) }
+
     var opis by rememberSaveable { mutableStateOf(draft.opis) }
+
+// osobne przełączniki dla każdej kategorii gabarytów
+    var catRozne by rememberSaveable { mutableStateOf(false) }
+    var catBio by rememberSaveable { mutableStateOf(false) }
+    var catOpony by rememberSaveable { mutableStateOf(false) }
+
+
 
     var photoFile1Path by rememberSaveable { mutableStateOf<String?>(null) }
     var photoBitmap1 by remember { mutableStateOf<Bitmap?>(null) }
@@ -329,130 +350,199 @@ fun AppScreen() {
                 )
 
 // --- Pole OPIS, nowoczesny styl ---
-                OutlinedTextField(
-                    value = opis,
-                    onValueChange = { opis = it },
-                    label = { Text("Opis") },
-                    minLines = 3,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 80.dp)
-                        .shadow(8.dp, RoundedCornerShape(18.dp))
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.surface,
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                )
+                // --- OPIS dla ZLECENIA albo KATEGORIA dla GABARYTÓW ---
+                if (typ == Config.SHEET_GABARYTY) {
+                    // Zamiast opisu – wybór kategorii gabarytów
+                    Text(
+                        "Rodzaj gabarytów:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedButton(
+                            onClick = { catRozne = !catRozne },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "różne",
+                                fontWeight = if (catRozne) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { catBio = !catBio },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "BIO",
+                                fontWeight = if (catBio) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { catOpony = !catOpony },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "opony",
+                                fontWeight = if (catOpony) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                } else {
+                    // Zwykły opis dla zlecenia
+                    OutlinedTextField(
+                        value = opis,
+                        onValueChange = { opis = it },
+                        label = { Text("Opis") },
+                        minLines = 3,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 80.dp)
+                            .shadow(8.dp, RoundedCornerShape(18.dp))
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.surface,
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                    )
+                                ),
+                                shape = RoundedCornerShape(18.dp)
                             ),
-                            shape = RoundedCornerShape(18.dp)
+                        shape = RoundedCornerShape(18.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            disabledBorderColor = MaterialTheme.colorScheme.outline,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary,
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurface
                         ),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                        focusedLabelColor = MaterialTheme.colorScheme.primary,
-                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    textStyle = MaterialTheme.typography.bodyLarge
-                )
+                        textStyle = MaterialTheme.typography.bodyLarge
+                    )
+                }
 
 
-                Spacer(Modifier.height(8.dp))
-                PhotoSlot(
-                    label = "Zdjęcie 1",
-                    bitmap = photoBitmap1,
-                    photoFilePath = photoFile1Path,
-                    onTake = {
-                        val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
-                        val uri = FileProvider.getUriForFile(
-                            context, "${context.packageName}.fileprovider", file
-                        )
-                        photoFile1Path = file.absolutePath
-                        takePictureLauncher1.launch(uri)
-                    },
-                    onRetake = {
-                        val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
-                        val uri = FileProvider.getUriForFile(
-                            context, "${context.packageName}.fileprovider", file
-                        )
-                        photoFile1Path = file.absolutePath
-                        takePictureLauncher1.launch(uri)
-                    },
-                    onClear = {
-                        photoBitmap1 = null
-                        photoFile1Path?.let { path -> runCatching { File(path).delete() } }
-                        photoFile1Path = null
-                    }
-                )
-                Spacer(Modifier.height(8.dp))
-                PhotoSlot(
-                    label = "Zdjęcie 2",
-                    bitmap = photoBitmap2,
-                    photoFilePath = photoFile2Path,
-                    onTake = {
-                        val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
-                        val uri = FileProvider.getUriForFile(
-                            context, "${context.packageName}.fileprovider", file
-                        )
-                        photoFile2Path = file.absolutePath
-                        takePictureLauncher2.launch(uri)
-                    },
-                    onRetake = {
-                        val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
-                        val uri = FileProvider.getUriForFile(
-                            context, "${context.packageName}.fileprovider", file
-                        )
-                        photoFile2Path = file.absolutePath
-                        takePictureLauncher2.launch(uri)
-                    },
-                    onClear = {
-                        photoBitmap2 = null
-                        photoFile2Path?.let { File(it).delete() }
-                        photoFile2Path = null
-                    }
-                )
-                Spacer(Modifier.height(8.dp))
-                PhotoSlot(
-                    label = "Zdjęcie 3",
-                    bitmap = photoBitmap3,
-                    photoFilePath = photoFile3Path,
-                    onTake = {
-                        val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
-                        val uri = FileProvider.getUriForFile(
-                            context, "${context.packageName}.fileprovider", file
-                        )
-                        photoFile3Path = file.absolutePath
-                        takePictureLauncher3.launch(uri)
-                    },
-                    onRetake = {
-                        val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
-                        val uri = FileProvider.getUriForFile(
-                            context, "${context.packageName}.fileprovider", file
-                        )
-                        photoFile3Path = file.absolutePath
-                        takePictureLauncher3.launch(uri)
-                    },
-                    onClear = {
-                        photoBitmap3 = null
-                        photoFile3Path?.let { File(it).delete() }
-                        photoFile3Path = null
-                    }
-                )
-                Spacer(Modifier.height(12.dp))
+
+
+                if (PHOTOS_ENABLED) {
+                    Spacer(Modifier.height(8.dp))
+                    PhotoSlot(
+                        label = "Zdjęcie 1",
+                        bitmap = photoBitmap1,
+                        photoFilePath = photoFile1Path,
+                        onTake = {
+                            val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
+                            val uri = FileProvider.getUriForFile(
+                                context, "${context.packageName}.fileprovider", file
+                            )
+                            photoFile1Path = file.absolutePath
+                            takePictureLauncher1.launch(uri)
+                        },
+                        onRetake = {
+                            val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
+                            val uri = FileProvider.getUriForFile(
+                                context, "${context.packageName}.fileprovider", file
+                            )
+                            photoFile1Path = file.absolutePath
+                            takePictureLauncher1.launch(uri)
+                        },
+                        onClear = {
+                            photoBitmap1 = null
+                            photoFile1Path?.let { path -> runCatching { File(path).delete() } }
+                            photoFile1Path = null
+                        }
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+                    PhotoSlot(
+                        label = "Zdjęcie 2",
+                        bitmap = photoBitmap2,
+                        photoFilePath = photoFile2Path,
+                        onTake = {
+                            val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
+                            val uri = FileProvider.getUriForFile(
+                                context, "${context.packageName}.fileprovider", file
+                            )
+                            photoFile2Path = file.absolutePath
+                            takePictureLauncher2.launch(uri)
+                        },
+                        onRetake = {
+                            val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
+                            val uri = FileProvider.getUriForFile(
+                                context, "${context.packageName}.fileprovider", file
+                            )
+                            photoFile2Path = file.absolutePath
+                            takePictureLauncher2.launch(uri)
+                        },
+                        onClear = {
+                            photoBitmap2 = null
+                            photoFile2Path?.let { File(it).delete() }
+                            photoFile2Path = null
+                        }
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+                    PhotoSlot(
+                        label = "Zdjęcie 3",
+                        bitmap = photoBitmap3,
+                        photoFilePath = photoFile3Path,
+                        onTake = {
+                            val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
+                            val uri = FileProvider.getUriForFile(
+                                context, "${context.packageName}.fileprovider", file
+                            )
+                            photoFile3Path = file.absolutePath
+                            takePictureLauncher3.launch(uri)
+                        },
+                        onRetake = {
+                            val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
+                            val uri = FileProvider.getUriForFile(
+                                context, "${context.packageName}.fileprovider", file
+                            )
+                            photoFile3Path = file.absolutePath
+                            takePictureLauncher3.launch(uri)
+                        },
+                        onClear = {
+                            photoBitmap3 = null
+                            photoFile3Path?.let { File(it).delete() }
+                            photoFile3Path = null
+                        }
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+                }
+
+
                 val vm = remember { SendVm() }
+
+                val hasOpis = opis.trim().isNotBlank()
+                val hasPhoto = PHOTOS_ENABLED && (photoFile1Path != null || photoFile2Path != null || photoFile3Path != null)
+
+
                 Button(
-                    enabled = !isSending &&
-                            !showBanner &&
-                            userName.isNotBlank() &&
-                            adres.trim().length >= 3 &&
-                            (
-                                    opis.trim().isNotBlank() ||
-                                            photoFile1Path != null ||
-                                            photoFile2Path != null ||
-                                            photoFile3Path != null
-                                    ),
+                    enabled = when (typ) {
+                        Config.SHEET_GABARYTY ->
+                            !isSending &&
+                                    !showBanner &&
+                                    userName.isNotBlank() &&
+                                    adres.trim().length >= 3 &&
+                                    (catRozne || catBio || catOpony)
+
+                        Config.SHEET_ZLECENIA ->
+                            !isSending &&
+                                    !showBanner &&
+                                    userName.isNotBlank() &&
+                                    adres.trim().length >= 3 &&
+                                    (hasOpis || hasPhoto)
+
+                        else -> false
+                    },
+
                     onClick = {
                         if (typ == null) {
                             message = "Zaznacz typ zgłoszenia"
@@ -462,13 +552,27 @@ fun AppScreen() {
                             message = "Podaj poprawny adres"
                             return@Button
                         }
-                        if (opis.trim().isBlank() &&
-                            photoFile1Path == null &&
-                            photoFile2Path == null &&
-                            photoFile3Path == null
-                        ) {
-                            message = "Podaj opis lub dodaj zdjęcie"
-                            return@Button
+
+                        // WALIDACJA ZALEŻNA OD TYPU
+                        when (typ) {
+                            Config.SHEET_GABARYTY -> {
+                                // dla gabarytów – musi być chociaż jedna kategoria
+                                if (!catRozne && !catBio && !catOpony) {
+                                    message = "Wybierz kategorię gabarytów"
+                                    return@Button
+                                }
+                            }
+                            Config.SHEET_ZLECENIA -> {
+                                // dla zleceń – musi być opis (lub zdjęcie, jeśli kiedyś włączysz PHOTOS_ENABLED)
+                                if (!hasOpis && !hasPhoto) {
+                                    message = if (PHOTOS_ENABLED) {
+                                        "Podaj opis lub dodaj zdjęcie"
+                                    } else {
+                                        "Podaj opis"
+                                    }
+                                    return@Button
+                                }
+                            }
                         }
                         isSending = true
                         message = null
