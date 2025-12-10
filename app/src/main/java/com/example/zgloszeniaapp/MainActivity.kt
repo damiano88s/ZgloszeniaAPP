@@ -123,8 +123,10 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.graphics.Brush
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -134,6 +136,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.sp
 
 private const val PHOTOS_ENABLED = false //import wylacza zdjecia
 
@@ -192,7 +198,11 @@ fun AppScreen() {
     var userName by rememberSaveable { mutableStateOf(UserPrefs.getName(context) ?: "") }
     val userId = remember { UserPrefs.getOrCreateUuid(context) }
 
-    var typ by rememberSaveable { mutableStateOf<String?>(draft.typ) }
+    var typ by rememberSaveable {
+        mutableStateOf<String?>(draft.typ ?: Config.SHEET_GABARYTY)
+    }
+
+
     var adres by rememberSaveable { mutableStateOf(draft.adres) }
 
     var opis by rememberSaveable { mutableStateOf(draft.opis) }
@@ -296,7 +306,7 @@ fun AppScreen() {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    "Zgłoszenia",
+                    "ZGŁOSZENIA",
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -304,97 +314,88 @@ fun AppScreen() {
                     textAlign = TextAlign.Center
                 )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TypeTab(
+                        label = "Gabaryty",
                         selected = typ == Config.SHEET_GABARYTY,
                         onClick = { typ = Config.SHEET_GABARYTY }
                     )
-                    Text("Gabaryty", modifier = Modifier.padding(end = 16.dp))
-                    RadioButton(
+                    Spacer(Modifier.width(16.dp))
+                    TypeTab(
+                        label = "Zlecenia",
                         selected = typ == Config.SHEET_ZLECENIA,
                         onClick = { typ = Config.SHEET_ZLECENIA }
                     )
-                    Text("Zlecenie")
                 }
 
+
                 // --- Pole ADRES, nowoczesny styl ---
-                OutlinedTextField(
-                    value = adres,
-                    onValueChange = { adres = it },
-                    label = { Text("Adres") },
-                    singleLine = true,
+                // --- Pole ADRES w stylu „kreska” jak w KD ---
+                // --- Pole ADRES w stylu jak w KD ---
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .shadow(8.dp, RoundedCornerShape(18.dp))
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.surface,
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                )
-                            ),
-                            shape = RoundedCornerShape(18.dp)
-                        ),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                        errorBorderColor = MaterialTheme.colorScheme.error,
-                        focusedLabelColor = MaterialTheme.colorScheme.primary,
-                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurface,
-                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        errorLabelColor = MaterialTheme.colorScheme.error,
-                    ),
-                    textStyle = MaterialTheme.typography.bodyLarge
-                )
+                        .padding(top = 0.dp, bottom = 0.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AddressField(
+                        value = adres,
+                        onValueChange = { adres = it },
+                        modifier = Modifier.fillMaxWidth(0.8f)  // ok. 80% szerokości ekranu
+                    )
+                }
+
 
 // --- Pole OPIS, nowoczesny styl ---
                 // --- OPIS dla ZLECENIA albo KATEGORIA dla GABARYTÓW ---
-                if (typ == Config.SHEET_GABARYTY) {
-                    // Zamiast opisu – wybór kategorii gabarytów
-                    Text(
-                        "Rodzaj gabarytów:",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                // --- OPIS dla ZLECENIA albo KATEGORIA dla GABARYTÓW ---
+                // --- OPIS dla ZLECENIA albo KATEGORIA dla GABARYTÓW ---
+                 if (typ == Config.SHEET_GABARYTY) {
 
-                    Spacer(Modifier.height(4.dp))
+                     Text(
+                         text = "Typ gabarytów",
+                         style = MaterialTheme.typography.titleMedium.copy(
+                             fontWeight = FontWeight.Light,
+                             fontSize = 20.sp
+                         ),
+                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                         modifier = Modifier
+                             .fillMaxWidth()
+                             .padding(top = 20.dp, bottom = 4.dp),
+                         textAlign = TextAlign.Center
+                     )
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedButton(
-                            onClick = { catRozne = !catRozne },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "różne",
-                                fontWeight = if (catRozne) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
 
-                        OutlinedButton(
-                            onClick = { catBio = !catBio },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "BIO",
-                                fontWeight = if (catBio) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
+                     Row(
+                         modifier = Modifier.fillMaxWidth(),
+                         horizontalArrangement = Arrangement.Center
+                     ) {
+                         CategoryOption(
+                             text = "różne",
+                             selected = catRozne,
+                             onClick = { catRozne = !catRozne }
+                         )
 
-                        OutlinedButton(
-                            onClick = { catOpony = !catOpony },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "opony",
-                                fontWeight = if (catOpony) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
-                } else {
+                         CategoryOption(
+                             text = "BIO",
+                             selected = catBio,
+                             onClick = { catBio = !catBio }
+                         )
+
+                         CategoryOption(
+                             text = "opony",
+                             selected = catOpony,
+                             onClick = { catOpony = !catOpony }
+                         )
+                     }
+
+                 } else {
                     // Zwykły opis dla zlecenia
                     OutlinedTextField(
                         value = opis,
@@ -425,6 +426,8 @@ fun AppScreen() {
                         textStyle = MaterialTheme.typography.bodyLarge
                     )
                 }
+
+
 
 
 
@@ -521,8 +524,11 @@ fun AppScreen() {
                 val vm = remember { SendVm() }
 
                 val hasOpis = opis.trim().isNotBlank()
-                val hasPhoto = PHOTOS_ENABLED && (photoFile1Path != null || photoFile2Path != null || photoFile3Path != null)
-
+                val hasPhoto = PHOTOS_ENABLED && (
+                        photoFile1Path != null ||
+                                photoFile2Path != null ||
+                                photoFile3Path != null
+                        )
 
                 Button(
                     enabled = when (typ) {
@@ -542,7 +548,6 @@ fun AppScreen() {
 
                         else -> false
                     },
-
                     onClick = {
                         if (typ == null) {
                             message = "Zaznacz typ zgłoszenia"
@@ -574,40 +579,61 @@ fun AppScreen() {
                                 }
                             }
                         }
+
+                        // 👉 TU BUDUJEMY OPIS, KTÓRY WYŚLEMY DO EXCELA
+                        val finalOpis = when (typ) {
+                            Config.SHEET_GABARYTY -> {
+                                val parts = mutableListOf<String>()
+                                if (catRozne) parts.add("różne")
+                                if (catBio) parts.add("BIO")
+                                if (catOpony) parts.add("opony")
+                                parts.joinToString(", ")
+                            }
+                            Config.SHEET_ZLECENIA -> opis.trim()
+                            else -> opis.trim()
+                        }
+
                         isSending = true
                         message = null
                         Log.d("API_URL", Config.WEB_APP_URL)
+
                         val payload = JSONObject().apply {
                             put("sekret", Config.SECRET_TOKEN)
                             put("typ", typ!!)
                             put("ulica_adres", adres.trim())
-                            put("opis", opis.trim())
+                            put("opis", finalOpis)   // 👈 TERAZ WYSYŁAMY finalOpis
                             put("uzytkownik", userName.trim())
                             put("urz_uuid", userId)
                             put("wersja_apki", Config.APP_VERSION)
                             put("timestamp_client", System.currentTimeMillis())
+
+                            // Zdjęcia mogą zostać w kodzie (PHOTOS_ENABLED = false → nie będą wymagane)
                             photoFile1Path?.let { path ->
                                 val f = File(path)
                                 put("photo1", fileToBase64Original(f))
                                 put(
                                     "fileName1",
-                                    f.name.ifBlank { "zdjecie1_${System.currentTimeMillis()}.jpg" })
+                                    f.name.ifBlank { "zdjecie1_${System.currentTimeMillis()}.jpg" }
+                                )
                             }
                             photoFile2Path?.let { path ->
                                 val f = File(path)
                                 put("photo2", fileToBase64Original(f))
                                 put(
                                     "fileName2",
-                                    f.name.ifBlank { "zdjecie2_${System.currentTimeMillis()}.jpg" })
+                                    f.name.ifBlank { "zdjecie2_${System.currentTimeMillis()}.jpg" }
+                                )
                             }
                             photoFile3Path?.let { path ->
                                 val f = File(path)
                                 put("photo3", fileToBase64Original(f))
                                 put(
                                     "fileName3",
-                                    f.name.ifBlank { "zdjecie3_${System.currentTimeMillis()}.jpg" })
+                                    f.name.ifBlank { "zdjecie3_${System.currentTimeMillis()}.jpg" }
+                                )
                             }
                         }
+
                         Log.d("API_DEBUG", "URL: ${Config.WEB_APP_URL}")
                         Log.d(
                             "API_DEBUG", "Payload keys: " +
@@ -617,6 +643,7 @@ fun AppScreen() {
                                         photoFile3Path?.let { "photo3" }
                                     )
                         )
+
                         vm.send(
                             url = Config.WEB_APP_URL,
                             payload = payload
@@ -627,11 +654,14 @@ fun AppScreen() {
                             showBanner = ok
                         }
                     },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.wrapContentWidth().align(Alignment.CenterHorizontally)
+
                 ) {
                     Text(if (isSending) "Wysyłanie..." else "Wyślij")
                 }
+
                 Log.d("UI_DEBUG", "Stan message: $message, showBanner: $showBanner")
+
             }
 
             // BANER JEST TU – NA GÓRZE, NAD CAŁYM FORMULARZEM!
@@ -700,6 +730,102 @@ fun SuccessBanner(text: String, modifier: Modifier = Modifier) {
         )
     }
 }
+
+@Composable
+fun TypeTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val activeColor = MaterialTheme.colorScheme.primary
+    val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    // Stan na zmierzoną szerokość tekstu
+    var textWidth by remember { mutableStateOf(0) }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+
+        // Tekst zakładki, mierzymy szerokość
+        Box(
+            modifier = Modifier
+                .height(28.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                fontSize = 20.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected) activeColor else inactiveColor,
+                onTextLayout = { result ->
+                    textWidth = result.size.width   // <<< tu mierzymy słowo
+                }
+            )
+        }
+
+        // Podkreślenie dokładnie tak długie jak tekst
+        Box(
+            modifier = Modifier
+                .height(8.dp)
+                .width(with(LocalDensity.current) { textWidth.toDp() }), // <<< tu rysujemy kreskę
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .height(3.dp)
+                        .fillMaxWidth()
+                        .background(activeColor, RoundedCornerShape(2.dp))
+                )
+            }
+        }
+    }
+}
+
+
+
+    @Composable
+    fun CategoryChip(
+        label: String,
+        selected: Boolean,
+        onClick: () -> Unit
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(horizontal = 4.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(50))
+                .background(
+                    if (selected)
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant
+                )
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                ),
+                color = if (selected)
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+
+
+
 
 
 @Composable
@@ -1006,3 +1132,170 @@ fun screenMaxSide(ctx: Context): Int {
     val dm = ctx.resources.displayMetrics
     return maxOf(dm.widthPixels, dm.heightPixels)
 }
+@Composable
+fun UnderlineTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    textStyle: TextStyle = MaterialTheme.typography.bodyLarge
+) {
+    TextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        singleLine = true,
+        modifier = modifier,
+        textStyle = textStyle,
+        colors = TextFieldDefaults.colors(
+            focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+            unfocusedIndicatorColor = MaterialTheme.colorScheme.outline,
+            disabledIndicatorColor = MaterialTheme.colorScheme.outline,
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            disabledContainerColor = Color.Transparent,
+            cursorColor = MaterialTheme.colorScheme.primary
+        )
+    )
+}
+
+@Composable
+fun AddressField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val lineColor = if (value.trim().isNotEmpty()) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+
+    Column(modifier = modifier) {
+
+        TextField(
+            value = value,
+            onValueChange = { rawText ->
+                // Czy na końcu jest spacja?
+                val hasTrailingSpace = rawText.endsWith(" ")
+
+                // Usuwamy spacje TYLKO z końca, ale zapamiętujemy, że była
+                val core = rawText.trimEnd()
+
+                // Zamiana na "Każde Słowo z Dużej"
+                val normalizedCore = core
+                    .split(' ')
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ") { word ->
+                        val lower = word.lowercase()
+                        lower.replaceFirstChar { ch ->
+                            if (ch.isLowerCase()) ch.titlecase() else ch.toString()
+                        }
+                    }
+
+                // Jeśli użytkownik wcisnął spację na końcu, to ją przywracamy
+                val finalText = if (hasTrailingSpace) {
+                    if (normalizedCore.isEmpty()) " " else normalizedCore + " "
+                } else {
+                    normalizedCore
+                }
+
+                onValueChange(finalText)
+            },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 0.dp),
+            placeholder = {
+                Text(
+                    text = "Wpisz nazwę ulicy",
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Light
+                )
+            },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Medium
+            ),
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                cursorColor = MaterialTheme.colorScheme.primary
+            ),
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Words,
+                autoCorrect = true,
+                keyboardType = KeyboardType.Text
+            )
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(lineColor)
+        )
+    }
+}
+
+@Composable
+fun CategoryOption(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val activeColor = MaterialTheme.colorScheme.primary
+    val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+
+        // Tekst – stała wysokość, żeby nic nie skakało
+        Box(
+            modifier = Modifier
+                .height(28.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                fontSize = 20.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected) activeColor else inactiveColor
+            )
+        }
+
+        // Podkreślenie – DŁUŻSZE, ale stałe (np. 60.dp)
+        Box(
+            modifier = Modifier
+                .height(8.dp)
+                .width(60.dp),              // <<< TU DŁUGOŚĆ KRESKI
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .height(3.dp)
+                        .width(60.dp)      // <<< TO SAMO CO WYŻEJ
+                        .background(activeColor, RoundedCornerShape(2.dp))
+                )
+            }
+        }
+    }
+}
+
+
