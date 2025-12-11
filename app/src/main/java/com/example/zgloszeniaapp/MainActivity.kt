@@ -141,6 +141,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.sp
 
+
+
 private const val PHOTOS_ENABLED = false //import wylacza zdjecia
 
 
@@ -166,7 +168,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        setContent { AppScreen() }
+        setContent {
+            com.example.zgloszeniaapp.ui.theme.ZgloszeniaAPPTheme {
+                AppScreen()
+            }
+        }
     }
 
 
@@ -192,28 +198,25 @@ enum class GabarytCategory(val label: String) {
 
 @Composable
 fun AppScreen() {
+
+    val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
     val draft = remember { context.loadDraft() }
+
     var userName by rememberSaveable { mutableStateOf(UserPrefs.getName(context) ?: "") }
     val userId = remember { UserPrefs.getOrCreateUuid(context) }
 
-    var typ by rememberSaveable {
-        mutableStateOf<String?>(draft.typ ?: Config.SHEET_GABARYTY)
-    }
-
-
+    var typ by rememberSaveable { mutableStateOf<String?>(draft.typ ?: Config.SHEET_GABARYTY) }
     var adres by rememberSaveable { mutableStateOf(draft.adres) }
-
     var opis by rememberSaveable { mutableStateOf(draft.opis) }
 
-// osobne przełączniki dla każdej kategorii gabarytów
+    // kategorie gabarytów
     var catRozne by rememberSaveable { mutableStateOf(false) }
     var catBio by rememberSaveable { mutableStateOf(false) }
     var catOpony by rememberSaveable { mutableStateOf(false) }
 
-
-
+    // zdjęcia
     var photoFile1Path by rememberSaveable { mutableStateOf<String?>(null) }
     var photoBitmap1 by remember { mutableStateOf<Bitmap?>(null) }
     var photoFile2Path by rememberSaveable { mutableStateOf<String?>(null) }
@@ -247,12 +250,9 @@ fun AppScreen() {
     var message by remember { mutableStateOf<String?>(null) }
     var showBanner by remember { mutableStateOf(false) }
 
-    if (message != null) Log.d("MESSAGE_DEBUG", "Current message: $message")
-
-    // Automatyczne czyszczenie formularza i późniejsze znikanie banera
+    // auto-czyszczenie formularza po OK
     LaunchedEffect(showBanner, message) {
         if (showBanner && message == "OK") {
-            // Najpierw od razu wyczyść formularz:
             adres = ""
             opis = ""
             photoBitmap1 = null
@@ -264,17 +264,14 @@ fun AppScreen() {
             photoBitmap3 = null
             photoFile3Path?.let { runCatching { File(it).delete() } }
             photoFile3Path = null
+
             context.clearDraft()
 
-            // Potem zostaw baner na ekranie jeszcze przez 1 sekundę:
             kotlinx.coroutines.delay(3000)
-
-            // I schowaj baner
             message = null
             showBanner = false
         }
     }
-
 
     if (userName.isBlank()) {
         NameDialog(
@@ -285,16 +282,15 @@ fun AppScreen() {
         )
     }
 
-    Scaffold { padding ->    // JEDYNY Scaffold!
+    Scaffold { padding ->
         val scroll = rememberScrollState()
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .pointerInput(Unit) {
-                    detectTapGestures(onTap = {
-                        focusManager.clearFocus()
-                    })
+                    detectTapGestures { focusManager.clearFocus() }
                 }
         ) {
             Column(
@@ -305,98 +301,120 @@ fun AppScreen() {
                     .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    "ZGŁOSZENIA",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    textAlign = TextAlign.Center
-                )
 
-                Row(
+                // --- NAGŁÓWEK „ZGŁOSZENIA” + podkreślenie ---
+                var titleWidthDp by remember { mutableStateOf(0.dp) }
+
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(top = 24.dp, bottom = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    TypeTab(
-                        label = "Gabaryty",
-                        selected = typ == Config.SHEET_GABARYTY,
-                        onClick = { typ = Config.SHEET_GABARYTY }
+                    Text(
+                        text = "ZGŁOSZENIA",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 22.sp, //zmniejszamy czcionke zgłoszenia
+                        fontWeight = FontWeight.Medium,
+                        onTextLayout = { result ->
+                            val widthPx = result.size.width
+                            titleWidthDp = with(density) { widthPx.toDp() }   // <<< UŻYWAMY density
+                        }
                     )
-                    Spacer(Modifier.width(16.dp))
-                    TypeTab(
-                        label = "Zlecenia",
-                        selected = typ == Config.SHEET_ZLECENIA,
-                        onClick = { typ = Config.SHEET_ZLECENIA }
+
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .width(titleWidthDp)
+                            .height(2.dp)
+                            .background(
+                                MaterialTheme.colorScheme.primary,
+                                RoundedCornerShape(2.dp)
+                            )
                     )
                 }
 
-
-                // --- Pole ADRES, nowoczesny styl ---
-                // --- Pole ADRES w stylu „kreska” jak w KD ---
-                // --- Pole ADRES w stylu jak w KD ---
+                // --- Zakładki: Gabaryty / Zlecenia ---
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 0.dp, bottom = 0.dp),
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(0.8f), // dokładnie jak adres
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TypeTab(
+                            label = "Gabaryty",
+                            selected = typ == Config.SHEET_GABARYTY,
+                            onClick = { typ = Config.SHEET_GABARYTY }
+                        )
+                        TypeTab(
+                            label = "Zlecenia",
+                            selected = typ == Config.SHEET_ZLECENIA,
+                            onClick = { typ = Config.SHEET_ZLECENIA }
+                        )
+                    }
+                }
+
+
+            }
+
+
+                // --- pole ADRES w stylu kreski jak w KD ---
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
                     AddressField(
                         value = adres,
                         onValueChange = { adres = it },
-                        modifier = Modifier.fillMaxWidth(0.8f)  // ok. 80% szerokości ekranu
+                        modifier = Modifier.fillMaxWidth(0.8f)
                     )
                 }
 
+                // --- OPIS / TYP GABARYTÓW ---
+                if (typ == Config.SHEET_GABARYTY) {
+                    Text(
+                        text = "Typ gabarytów",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Light,
+                            fontSize = 22.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 30.dp, bottom = 4.dp), // tu obnizamy napis typ gabarytow
+                        textAlign = TextAlign.Center
+                    )
 
-// --- Pole OPIS, nowoczesny styl ---
-                // --- OPIS dla ZLECENIA albo KATEGORIA dla GABARYTÓW ---
-                // --- OPIS dla ZLECENIA albo KATEGORIA dla GABARYTÓW ---
-                // --- OPIS dla ZLECENIA albo KATEGORIA dla GABARYTÓW ---
-                 if (typ == Config.SHEET_GABARYTY) {
-
-                     Text(
-                         text = "Typ gabarytów",
-                         style = MaterialTheme.typography.titleMedium.copy(
-                             fontWeight = FontWeight.Light,
-                             fontSize = 20.sp
-                         ),
-                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                         modifier = Modifier
-                             .fillMaxWidth()
-                             .padding(top = 20.dp, bottom = 4.dp),
-                         textAlign = TextAlign.Center
-                     )
-
-
-                     Row(
-                         modifier = Modifier.fillMaxWidth(),
-                         horizontalArrangement = Arrangement.Center
-                     ) {
-                         CategoryOption(
-                             text = "różne",
-                             selected = catRozne,
-                             onClick = { catRozne = !catRozne }
-                         )
-
-                         CategoryOption(
-                             text = "BIO",
-                             selected = catBio,
-                             onClick = { catBio = !catBio }
-                         )
-
-                         CategoryOption(
-                             text = "opony",
-                             selected = catOpony,
-                             onClick = { catOpony = !catOpony }
-                         )
-                     }
-
-                 } else {
-                    // Zwykły opis dla zlecenia
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),    // <<< TU OBNIŻASZ OPCJE rozne/bio/opony
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CategoryOption(
+                            text = "różne",
+                            selected = catRozne,
+                            onClick = { catRozne = !catRozne }
+                        )
+                        CategoryOption(
+                            text = "BIO",
+                            selected = catBio,
+                            onClick = { catBio = !catBio }
+                        )
+                        CategoryOption(
+                            text = "opony",
+                            selected = catOpony,
+                            onClick = { catOpony = !catOpony }
+                        )
+                    }
+                } else {
                     OutlinedTextField(
                         value = opis,
                         onValueChange = { opis = it },
@@ -427,11 +445,7 @@ fun AppScreen() {
                     )
                 }
 
-
-
-
-
-
+                // --- zdjęcia (jeśli PHOTOS_ENABLED) ---
                 if (PHOTOS_ENABLED) {
                     Spacer(Modifier.height(8.dp))
                     PhotoSlot(
@@ -520,9 +534,8 @@ fun AppScreen() {
                     Spacer(Modifier.height(12.dp))
                 }
 
-
+                // --- PRZYCISK WYŚLIJ ---
                 val vm = remember { SendVm() }
-
                 val hasOpis = opis.trim().isNotBlank()
                 val hasPhoto = PHOTOS_ENABLED && (
                         photoFile1Path != null ||
@@ -558,17 +571,15 @@ fun AppScreen() {
                             return@Button
                         }
 
-                        // WALIDACJA ZALEŻNA OD TYPU
                         when (typ) {
                             Config.SHEET_GABARYTY -> {
-                                // dla gabarytów – musi być chociaż jedna kategoria
                                 if (!catRozne && !catBio && !catOpony) {
                                     message = "Wybierz kategorię gabarytów"
                                     return@Button
                                 }
                             }
+
                             Config.SHEET_ZLECENIA -> {
-                                // dla zleceń – musi być opis (lub zdjęcie, jeśli kiedyś włączysz PHOTOS_ENABLED)
                                 if (!hasOpis && !hasPhoto) {
                                     message = if (PHOTOS_ENABLED) {
                                         "Podaj opis lub dodaj zdjęcie"
@@ -580,7 +591,6 @@ fun AppScreen() {
                             }
                         }
 
-                        // 👉 TU BUDUJEMY OPIS, KTÓRY WYŚLEMY DO EXCELA
                         val finalOpis = when (typ) {
                             Config.SHEET_GABARYTY -> {
                                 val parts = mutableListOf<String>()
@@ -589,6 +599,7 @@ fun AppScreen() {
                                 if (catOpony) parts.add("opony")
                                 parts.joinToString(", ")
                             }
+
                             Config.SHEET_ZLECENIA -> opis.trim()
                             else -> opis.trim()
                         }
@@ -601,13 +612,12 @@ fun AppScreen() {
                             put("sekret", Config.SECRET_TOKEN)
                             put("typ", typ!!)
                             put("ulica_adres", adres.trim())
-                            put("opis", finalOpis)   // 👈 TERAZ WYSYŁAMY finalOpis
+                            put("opis", finalOpis)
                             put("uzytkownik", userName.trim())
                             put("urz_uuid", userId)
                             put("wersja_apki", Config.APP_VERSION)
                             put("timestamp_client", System.currentTimeMillis())
 
-                            // Zdjęcia mogą zostać w kodzie (PHOTOS_ENABLED = false → nie będą wymagane)
                             photoFile1Path?.let { path ->
                                 val f = File(path)
                                 put("photo1", fileToBase64Original(f))
@@ -654,55 +664,38 @@ fun AppScreen() {
                             showBanner = ok
                         }
                     },
-                    modifier = Modifier.wrapContentWidth().align(Alignment.CenterHorizontally)
-
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .align(Alignment.CenterHorizontally)
                 ) {
                     Text(if (isSending) "Wysyłanie..." else "Wyślij")
                 }
 
                 Log.d("UI_DEBUG", "Stan message: $message, showBanner: $showBanner")
-
             }
 
-            // BANER JEST TU – NA GÓRZE, NAD CAŁYM FORMULARZEM!
+            // baner nad wszystkim
             if (showBanner && message == "OK") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 32.dp)
                         .zIndex(1f),
-                    contentAlignment = Alignment.TopCenter
+                    contentAlignment = Alignment.Center
+
                 ) {
                     SuccessBanner(
                         "Zgłoszenie zostało wysłane ✅",
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
             }
         }
     }
 
-    LaunchedEffect(showBanner, message) {
-        if (showBanner && message == "OK") {
-            kotlinx.coroutines.delay(2500)
-            adres = ""
-            opis = ""
-            photoBitmap1 = null
-            photoFile1Path?.let { runCatching { File(it).delete() } }
-            photoFile1Path = null
-            photoBitmap2 = null
-            photoFile2Path?.let { runCatching { File(it).delete() } }
-            photoFile2Path = null
-            photoBitmap3 = null
-            photoFile3Path?.let { runCatching { File(it).delete() } }
-            photoFile3Path = null
-            context.clearDraft()
-            message = null
-            showBanner = false
-        }
-    }
-}
+
+
+
 
 
 
@@ -740,7 +733,6 @@ fun TypeTab(
     val activeColor = MaterialTheme.colorScheme.primary
     val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
 
-    // Stan na zmierzoną szerokość tekstu
     var textWidth by remember { mutableStateOf(0) }
 
     Column(
@@ -751,22 +743,20 @@ fun TypeTab(
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(vertical = 4.dp)   // ← USUWAMY horizontal = 16.dp
     ) {
-
-        // Tekst zakładki, mierzymy szerokość
+        // Tekst zakładki – mierzymy szerokość
         Box(
-            modifier = Modifier
-                .height(28.dp),
+            modifier = Modifier.height(28.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = label,
-                fontSize = 20.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                fontSize = 22.sp,     //zwiekszam czcionke gabaryty/zlecenia
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Light,
                 color = if (selected) activeColor else inactiveColor,
                 onTextLayout = { result ->
-                    textWidth = result.size.width   // <<< tu mierzymy słowo
+                    textWidth = result.size.width
                 }
             )
         }
@@ -775,7 +765,7 @@ fun TypeTab(
         Box(
             modifier = Modifier
                 .height(8.dp)
-                .width(with(LocalDensity.current) { textWidth.toDp() }), // <<< tu rysujemy kreskę
+                .width(with(LocalDensity.current) { textWidth.toDp() }),
             contentAlignment = Alignment.Center
         ) {
             if (selected) {
@@ -789,6 +779,7 @@ fun TypeTab(
         }
     }
 }
+
 
 
 
@@ -1211,11 +1202,11 @@ fun AddressField(
                     text = "Wpisz nazwę ulicy",
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
-                    fontSize = 20.sp,
+                    fontSize = 22.sp, //zwiekszanie napisu
                     fontWeight = FontWeight.Light
                 )
             },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
+            textStyle = MaterialTheme.typography.bodyLarge.copy( //zwiekszanie czcionki wpisywanego adresu
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Medium
             ),
@@ -1273,7 +1264,7 @@ fun CategoryOption(
         ) {
             Text(
                 text = text,
-                fontSize = 20.sp,
+                fontSize = 22.sp, //zwiekszamy czcionke rozne/bio/opony
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 color = if (selected) activeColor else inactiveColor
             )
