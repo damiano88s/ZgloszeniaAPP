@@ -142,6 +142,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.sp
 
 
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.ui.unit.Density
+
+import androidx.activity.compose.BackHandler
+import com.example.zgloszeniaapp.ui.theme.ZgloszeniaAPPTheme
+
 
 private const val PHOTOS_ENABLED = false //import wylacza zdjecia
 
@@ -169,7 +175,9 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            com.example.zgloszeniaapp.ui.theme.ZgloszeniaAPPTheme {
+            ZgloszeniaAPPTheme(
+                darkTheme = false
+            ) {
                 AppScreen()
             }
         }
@@ -192,7 +200,13 @@ enum class GabarytCategory(val label: String) {
     OPONY("opony")
 }
 
+enum class Screen {
+    ZGLOSZENIA,
+    WODOMIERZE
+}
 
+
+@OptIn(ExperimentalMaterial3Api::class)
 
 
 
@@ -208,6 +222,14 @@ fun AppScreen() {
     val userId = remember { UserPrefs.getOrCreateUuid(context) }
 
     var typ by rememberSaveable { mutableStateOf<String?>(draft.typ) }
+
+    var screen by rememberSaveable { mutableStateOf(Screen.ZGLOSZENIA) }
+    BackHandler(enabled = screen == Screen.WODOMIERZE) {
+        screen = Screen.ZGLOSZENIA
+    }
+
+    var menuExpanded by remember { mutableStateOf(false) }
+
 
     var adres by rememberSaveable { mutableStateOf(draft.adres) }
     var opis by rememberSaveable { mutableStateOf(draft.opis) }
@@ -291,290 +313,403 @@ fun AppScreen() {
     }
 
     Scaffold { padding ->
-        val scroll = rememberScrollState()
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .pointerInput(Unit) {
-                    detectTapGestures { focusManager.clearFocus() }
-                }
         ) {
 
-            // ====== CAŁA ZAWARTOŚĆ EKRANU MUSI BYĆ W JEDNEJ COLUMN ======
-            Column(
+            // ====== TREŚĆ EKRANU ======
+            when (screen) {
+                Screen.ZGLOSZENIA -> {
+                    ZgloszeniaScreen(
+                        padding = PaddingValues(0.dp),
+                        focusManager = focusManager,
+                        density = density,
+
+                        typ = typ,
+                        onTypChange = { typ = it },
+
+                        adres = adres,
+                        onAdresChange = { adres = it },
+
+                        opis = opis,
+                        onOpisChange = { opis = it },
+
+                        catRozne = catRozne,
+                        onCatRozne = { catRozne = it },
+
+                        catBio = catBio,
+                        onCatBio = { catBio = it },
+
+                        catOpony = catOpony,
+                        onCatOpony = { catOpony = it },
+
+                        isSending = isSending,
+                        onIsSending = { isSending = it },
+
+                        message = message,
+                        onMessage = { message = it },
+
+                        showBanner = showBanner,
+                        onShowBanner = { showBanner = it },
+
+                        userName = userName,
+                        userId = userId,
+
+                        photoFile1Path = photoFile1Path,
+                        photoFile2Path = photoFile2Path,
+                        photoFile3Path = photoFile3Path
+                    )
+                }
+
+                Screen.WODOMIERZE -> {
+                    WodomierzeScreen(
+                        padding = PaddingValues(0.dp),
+                        userName = userName,
+                        userId = userId
+                    )
+                }
+            }
+
+            // ====== MENU (3 KROPKI) W PRAWYM GÓRNYM ROGU ======
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .verticalScroll(scroll)
-                    .imePadding(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .align(Alignment.TopEnd)
+                    .padding(top = 8.dp, end = 8.dp)
+                    .zIndex(10f)
             ) {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Menu"
+                    )
+                }
 
-                // --- NAGŁÓWEK „ZGŁOSZENIA” + podkreślenie ---
-                var titleWidthDp by remember { mutableStateOf(0.dp) }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp, bottom = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
                 ) {
-                    Text(
-                        text = "ZGŁOSZENIA",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Medium,
-                        onTextLayout = { result ->
-                            val widthPx = result.size.width
-                            titleWidthDp = with(density) { widthPx.toDp() }
+
+                    DropdownMenuItem(
+                        text = { Text("Wodomierze") },
+                        onClick = {
+                            screen = Screen.WODOMIERZE
+                            menuExpanded = false
                         }
                     )
-
-                    Spacer(Modifier.height(4.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .width(titleWidthDp)
-                            .height(2.dp)
-                            .background(
-                                MaterialTheme.colorScheme.primary,
-                                RoundedCornerShape(2.dp)
-                            )
-                    )
                 }
-
-                // --- Zakładki: Gabaryty / Zlecenia ---
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(0.8f), // jak adres
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TypeTab(
-                            label = "Gabaryty",
-                            selected = typ == Config.SHEET_GABARYTY,
-                            onClick = { typ = Config.SHEET_GABARYTY }
-                        )
-                        TypeTab(
-                            label = "Zlecenia",
-                            selected = typ == Config.SHEET_ZLECENIA,
-                            onClick = { typ = Config.SHEET_ZLECENIA }
-                        )
-                    }
-                }
-
-                // --- pole ADRES ---
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AddressField(
-                        value = adres,
-                        onValueChange = { adres = it },
-                        modifier = Modifier.fillMaxWidth(0.8f)
-                    )
-                }
-
-                // --- OPIS / TYP GABARYTÓW ---
-                if (typ == Config.SHEET_GABARYTY) {
-                    Text(
-                        text = "Typ gabarytów",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Light,
-                            fontSize = 22.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 30.dp, bottom = 4.dp),
-                        textAlign = TextAlign.Center
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        CategoryOption(
-                            text = "różne",
-                            selected = catRozne,
-                            onClick = { catRozne = !catRozne }
-                        )
-                        CategoryOption(
-                            text = "BIO",
-                            selected = catBio,
-                            onClick = { catBio = !catBio }
-                        )
-                        CategoryOption(
-                            text = "opony",
-                            selected = catOpony,
-                            onClick = { catOpony = !catOpony }
-                        )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        OpisFieldUnderline(
-                            value = opis,
-                            onValueChange = { opis = it },
-                            modifier = Modifier.fillMaxWidth(0.8f)
-                        )
-                    }
-
-                }
-
-                // --- zdjęcia (jeśli PHOTOS_ENABLED) ---
-                if (PHOTOS_ENABLED) {
-                    Spacer(Modifier.height(8.dp))
-                    // (Tu zostaw swój istniejący kod PhotoSlot 1/2/3)
-                    Spacer(Modifier.height(12.dp))
-                }
-
-
-                // --- PRZYCISK WYŚLIJ ---
-                val vm = remember { SendVm() }
-                val hasOpis = opis.trim().isNotBlank()
-                val hasPhoto = PHOTOS_ENABLED && (
-                        photoFile1Path != null || photoFile2Path != null || photoFile3Path != null
-                        )
-
-                // Przyciski: wybierz styl:
-                // A) pełna szerokość (stabilnie, "google’owo"):
-
-
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Button(
-                        enabled = when (typ) {
-                            Config.SHEET_GABARYTY ->
-                                !isSending &&
-                                        !showBanner &&
-                                        userName.isNotBlank() &&
-                                        adres.trim().length >= 3 &&
-                                        (catRozne || catBio || catOpony)
-
-                            Config.SHEET_ZLECENIA ->
-                                !isSending &&
-                                        !showBanner &&
-                                        userName.isNotBlank() &&
-                                        adres.trim().length >= 3 &&
-                                        (hasOpis || hasPhoto)
-
-                            else -> false
-                        },
-                        onClick = {
-
-                            if (typ == null) {
-                                message = "Zaznacz typ zgłoszenia"
-                                return@Button
-                            }
-                            if (adres.trim().length < 3) {
-                                message = "Podaj poprawny adres"
-                                return@Button
-                            }
-
-                            when (typ) {
-                                Config.SHEET_GABARYTY -> {
-                                    if (!catRozne && !catBio && !catOpony) {
-                                        message = "Wybierz kategorię gabarytów"
-                                        return@Button
-                                    }
-                                }
-
-                                Config.SHEET_ZLECENIA -> {
-                                    if (!hasOpis && !hasPhoto) {
-                                        message =
-                                            if (PHOTOS_ENABLED) "Podaj opis lub dodaj zdjęcie" else "Podaj opis"
-                                        return@Button
-                                    }
-                                }
-                            }
-
-                            val finalOpis = when (typ) {
-                                Config.SHEET_GABARYTY -> {
-                                    val parts = mutableListOf<String>()
-                                    if (catRozne) parts.add("różne")
-                                    if (catBio) parts.add("BIO")
-                                    if (catOpony) parts.add("opony")
-                                    parts.joinToString(", ")
-                                }
-
-                                Config.SHEET_ZLECENIA -> opis.trim()
-                                else -> opis.trim()
-                            }
-
-                            isSending = true
-                            message = null
-
-                            val payload = JSONObject().apply {
-                                put("sekret", Config.SECRET_TOKEN)
-                                put("typ", typ!!)
-                                put("ulica_adres", adres.trim())
-                                put("opis", finalOpis)
-                                put("uzytkownik", userName.trim())
-                                put("urz_uuid", userId)
-                                put("wersja_apki", Config.APP_VERSION)
-                                put("timestamp_client", System.currentTimeMillis())
-
-                                photoFile1Path?.let { path ->
-                                    val f = File(path)
-                                    put("photo1", fileToBase64Original(f))
-                                    put("fileName1", f.name.ifBlank { "zdjecie1_${System.currentTimeMillis()}.jpg" })
-                                }
-                                photoFile2Path?.let { path ->
-                                    val f = File(path)
-                                    put("photo2", fileToBase64Original(f))
-                                    put("fileName2", f.name.ifBlank { "zdjecie2_${System.currentTimeMillis()}.jpg" })
-                                }
-                                photoFile3Path?.let { path ->
-                                    val f = File(path)
-                                    put("photo3", fileToBase64Original(f))
-                                    put("fileName3", f.name.ifBlank { "zdjecie3_${System.currentTimeMillis()}.jpg" })
-                                }
-                            }
-
-                            vm.send(
-                                url = Config.WEB_APP_URL,
-                                payload = payload
-                            ) { ok, msg ->
-                                isSending = false
-                                message = if (ok) "OK" else "Błąd: $msg"
-                                showBanner = ok
-                            }
-                        },
-                        modifier = Modifier.wrapContentWidth()
-                    ) {
-                        Text(if (isSending) "Wysyłanie..." else "Wyślij")
-                    }
-                }
-
-                if (showBanner && message == "OK") {
-                    SuccessBanner(
-                        "Zgłoszenie zostało wysłane ✅",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                    )
-                }
-
             }
         }
     }
 }
 
+
+    @Composable
+fun ZgloszeniaScreen(
+    padding: PaddingValues,
+    focusManager: androidx.compose.ui.focus.FocusManager,
+    density: Density,
+
+    typ: String?,
+    onTypChange: (String?) -> Unit,
+
+    adres: String,
+    onAdresChange: (String) -> Unit,
+
+    opis: String,
+    onOpisChange: (String) -> Unit,
+
+    catRozne: Boolean,
+    onCatRozne: (Boolean) -> Unit,
+
+    catBio: Boolean,
+    onCatBio: (Boolean) -> Unit,
+
+    catOpony: Boolean,
+    onCatOpony: (Boolean) -> Unit,
+
+    isSending: Boolean,
+    onIsSending: (Boolean) -> Unit,
+
+    message: String?,
+    onMessage: (String?) -> Unit,
+
+    showBanner: Boolean,
+    onShowBanner: (Boolean) -> Unit,
+
+    userName: String,
+    userId: String,
+
+    photoFile1Path: String?,
+    photoFile2Path: String?,
+    photoFile3Path: String?
+) {
+    val scroll = rememberScrollState()
+
+    // SendVm w screenie (żeby działało bez kombinowania)
+    val vm = remember { SendVm() }
+
+    // do walidacji zleceń
+    val hasOpis = opis.trim().isNotBlank()
+    val hasPhoto = PHOTOS_ENABLED && (
+            photoFile1Path != null || photoFile2Path != null || photoFile3Path != null
+            )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .pointerInput(Unit) {
+                detectTapGestures { focusManager.clearFocus() }
+            }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .verticalScroll(scroll)
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+
+            ScreenTitleWithUnderline(title = "ZGŁOSZENIA")
+
+            Spacer(Modifier.height(30.dp))
+
+            // --- Zakładki: Gabaryty / Zlecenia ---
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 0.dp),
+                        contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(0.8f), // jak adres
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TypeTab(
+                        label = "Gabaryty",
+                        selected = typ == Config.SHEET_GABARYTY,
+                        onClick = { onTypChange(Config.SHEET_GABARYTY) }
+                    )
+                    TypeTab(
+                        label = "Zlecenia",
+                        selected = typ == Config.SHEET_ZLECENIA,
+                        onClick = { onTypChange(Config.SHEET_ZLECENIA) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(0.dp))
+
+
+
+            // ⬇️ OBNIZAM POLE ADRESU
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // --- pole ADRES ---
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                AddressField(
+                    value = adres,
+                    onValueChange = { onAdresChange(it) },
+                    modifier = Modifier.fillMaxWidth(0.8f)
+                )
+            }
+
+            // --- OPIS / TYP GABARYTÓW ---
+            if (typ == Config.SHEET_GABARYTY) {
+
+                Text(
+                    text = "Typ gabarytów",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Light,
+                        fontSize = 22.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 40.dp, bottom = 4.dp),
+                    textAlign = TextAlign.Center
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    CategoryOption(
+                        text = "różne",
+                        selected = catRozne,
+                        onClick = {
+                            onCatRozne(!catRozne)   // tylko TO przełącz
+                            focusManager.clearFocus() // schowaj klawiaturę
+                        }
+                    )
+
+                    CategoryOption(
+                        text = "BIO",
+                        selected = catBio,
+                        onClick = {
+                            onCatBio(!catBio)
+                            focusManager.clearFocus()
+                        }
+                    )
+
+                    CategoryOption(
+                        text = "opony",
+                        selected = catOpony,
+                        onClick = {
+                            onCatOpony(!catOpony)
+                            focusManager.clearFocus()
+                        }
+                    )
+
+                }
+
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    OpisFieldUnderline(
+                        value = opis,
+                        onValueChange = { onOpisChange(it) },
+                        modifier = Modifier.fillMaxWidth(0.8f)
+                    )
+                }
+            }
+
+            // --- zdjęcia (jeśli PHOTOS_ENABLED) ---
+            if (PHOTOS_ENABLED) {
+                Spacer(Modifier.height(8.dp))
+                // zostawiasz swój kod PhotoSlot 1/2/3 jeśli kiedyś włączysz
+                Spacer(Modifier.height(12.dp))
+            }
+
+            // --- PRZYCISK WYŚLIJ + BANER POD NIM ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Button(
+                    enabled = when (typ) {
+                        Config.SHEET_GABARYTY ->
+                            !isSending &&
+                                    !showBanner &&
+                                    userName.isNotBlank() &&
+                                    adres.trim().length >= 3 &&
+                                    (catRozne || catBio || catOpony)
+
+                        Config.SHEET_ZLECENIA ->
+                            !isSending &&
+                                    !showBanner &&
+                                    userName.isNotBlank() &&
+                                    adres.trim().length >= 3 &&
+                                    (hasOpis || hasPhoto)
+
+                        else -> false
+                    },
+                    onClick = {
+                        if (typ == null) {
+                            onMessage("Zaznacz typ zgłoszenia")
+                            return@Button
+                        }
+                        if (adres.trim().length < 3) {
+                            onMessage("Podaj poprawny adres")
+                            return@Button
+                        }
+
+                        when (typ) {
+                            Config.SHEET_GABARYTY -> {
+                                if (!catRozne && !catBio && !catOpony) {
+                                    onMessage("Wybierz kategorię gabarytów")
+                                    return@Button
+                                }
+                            }
+                            Config.SHEET_ZLECENIA -> {
+                                if (!hasOpis && !hasPhoto) {
+                                    onMessage(if (PHOTOS_ENABLED) "Podaj opis lub dodaj zdjęcie" else "Podaj opis")
+                                    return@Button
+                                }
+                            }
+                        }
+
+                        val finalOpis = when (typ) {
+                            Config.SHEET_GABARYTY -> {
+                                val parts = mutableListOf<String>()
+                                if (catRozne) parts.add("różne")
+                                if (catBio) parts.add("BIO")
+                                if (catOpony) parts.add("opony")
+                                parts.joinToString(", ")
+                            }
+                            Config.SHEET_ZLECENIA -> opis.trim()
+                            else -> opis.trim()
+                        }
+
+                        onIsSending(true)
+                        onMessage(null)
+
+                        val payload = JSONObject().apply {
+                            put("sekret", Config.SECRET_TOKEN)
+                            put("typ", typ!!)
+                            put("ulica_adres", adres.trim())
+                            put("opis", finalOpis)
+                            put("uzytkownik", userName.trim())
+                            put("urz_uuid", userId)
+                            put("wersja_apki", Config.APP_VERSION)
+                            put("timestamp_client", System.currentTimeMillis())
+
+                            // zdjęcia tylko jeśli kiedyś włączysz
+                            photoFile1Path?.let { path ->
+                                val f = File(path)
+                                put("photo1", fileToBase64Original(f))
+                                put("fileName1", f.name.ifBlank { "zdjecie1_${System.currentTimeMillis()}.jpg" })
+                            }
+                            photoFile2Path?.let { path ->
+                                val f = File(path)
+                                put("photo2", fileToBase64Original(f))
+                                put("fileName2", f.name.ifBlank { "zdjecie2_${System.currentTimeMillis()}.jpg" })
+                            }
+                            photoFile3Path?.let { path ->
+                                val f = File(path)
+                                put("photo3", fileToBase64Original(f))
+                                put("fileName3", f.name.ifBlank { "zdjecie3_${System.currentTimeMillis()}.jpg" })
+                            }
+                        }
+
+                        vm.send(
+                            url = Config.WEB_APP_URL,
+                            payload = payload
+                        ) { ok, msg ->
+                            onIsSending(false)
+                            onMessage(if (ok) "OK" else "Błąd: $msg")
+                            onShowBanner(ok)
+                        }
+                    },
+                    modifier = Modifier.wrapContentWidth()
+                ) {
+                    Text(if (isSending) "Wysyłanie..." else "Wyślij")
+                }
+            }
+
+            if (showBanner && message == "OK") {
+                SuccessBanner(
+                    "Zgłoszenie zostało wysłane ✅",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                )
+            }
+        }
+    }
+}
 
 
 
@@ -615,7 +750,13 @@ fun TypeTab(
     val activeColor = MaterialTheme.colorScheme.primary
     val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
 
-    var textWidth by remember { mutableStateOf(0) }
+    var textWidthPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+
+    // zamiana px -> dp bez toDp()
+    val underlineWidth = remember(textWidthPx, density.density) {
+        (textWidthPx / density.density).dp
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -625,7 +766,7 @@ fun TypeTab(
                 indication = null,
                 onClick = onClick
             )
-            .padding(vertical = 4.dp)   // ← USUWAMY horizontal = 16.dp
+            .padding(vertical = 4.dp)
     ) {
         // Tekst zakładki – mierzymy szerokość
         Box(
@@ -634,20 +775,20 @@ fun TypeTab(
         ) {
             Text(
                 text = label,
-                fontSize = 22.sp,     //zwiekszam czcionke gabaryty/zlecenia
+                fontSize = 22.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Light,
                 color = if (selected) activeColor else inactiveColor,
                 onTextLayout = { result ->
-                    textWidth = result.size.width
+                    textWidthPx = result.size.width
                 }
             )
         }
 
-        // Podkreślenie dokładnie tak długie jak tekst
+        // Podkreślenie dokładnie jak tekst
         Box(
             modifier = Modifier
                 .height(8.dp)
-                .width(with(LocalDensity.current) { textWidth.toDp() }),
+                .width(underlineWidth),
             contentAlignment = Alignment.Center
         ) {
             if (selected) {
@@ -661,6 +802,7 @@ fun TypeTab(
         }
     }
 }
+
 
 
 
@@ -1147,7 +1289,7 @@ fun CategoryOption(
             Text(
                 text = text,
                 fontSize = 22.sp, //zwiekszamy czcionke rozne/bio/opony
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Light,
                 color = if (selected) activeColor else inactiveColor
             )
         }
@@ -1226,7 +1368,192 @@ fun OpisFieldUnderline(
     }
 }
 
+@Composable
+fun WodomierzeScreen(
+    padding: PaddingValues,
+    userName: String,
+    userId: String
+) {
+    val focusManager = LocalFocusManager.current
+    val scroll = rememberScrollState()
 
+    var adres by rememberSaveable { mutableStateOf("") }
+    var numerWodomierza by rememberSaveable { mutableStateOf("") }
+    var stan by rememberSaveable { mutableStateOf("") }
+
+    val canSave =
+        userName.isNotBlank() &&
+                adres.trim().length >= 3 &&
+                numerWodomierza.trim().isNotBlank() &&
+                stan.trim().isNotBlank()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .verticalScroll(scroll)
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+
+            // nagłówek jak w zgłoszeniach (jeśli chcesz, możesz usunąć)
+            Text(
+                text = "WODOMIERZE",
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Medium
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            // Adres - ten sam styl co u Ciebie
+            AddressField(
+                value = adres,
+                onValueChange = { adres = it },
+                modifier = Modifier.fillMaxWidth(0.8f)
+            )
+
+            // Numer wodomierza - proste pole z kreską (tak jak opis/adres)
+            UnderlineInput(
+                value = numerWodomierza,
+                onValueChange = { numerWodomierza = it },
+                placeholder = "Numer wodomierza",
+                modifier = Modifier.fillMaxWidth(0.8f),
+                singleLine = true
+            )
+
+            // Stan - tylko cyfry / przecinek / kropka (żeby było wygodniej)
+            UnderlineInput(
+                value = stan,
+                onValueChange = { new ->
+                    stan = new.filter { it.isDigit() || it == '.' || it == ',' }
+                },
+                placeholder = "Stan",
+                modifier = Modifier.fillMaxWidth(0.8f),
+                singleLine = true,
+                keyboardType = KeyboardType.Number
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Button(
+                enabled = canSave,
+                onClick = {
+                    // NA RAZIE puste
+                    // w następnym kroku: robimy 1 zdjęcie + wysyłkę do Apps Script
+                },
+                modifier = Modifier.wrapContentWidth()
+            ) {
+                Text("Zapisz")
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnderlineInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = true,
+    keyboardType: KeyboardType = KeyboardType.Text
+) {
+    val lineColor = if (value.trim().isNotEmpty()) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+
+    Column(modifier = modifier) {
+        TextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = singleLine,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = {
+                Text(
+                    text = placeholder,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Light
+                )
+            },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Medium
+            ),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = keyboardType
+            ),
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                cursorColor = MaterialTheme.colorScheme.primary
+            )
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(lineColor)
+        )
+    }
+}
+
+@Composable
+fun ScreenTitleWithUnderline(
+    title: String,
+    modifier: Modifier = Modifier,
+    topPadding: androidx.compose.ui.unit.Dp = 24.dp,
+    bottomPadding: androidx.compose.ui.unit.Dp = 12.dp
+) {
+    var titleWidthDp by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = topPadding, bottom = bottomPadding),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = title,
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Medium,
+            onTextLayout = { result ->
+                titleWidthDp = with(density) { result.size.width.toDp() }
+            }
+        )
+
+        Spacer(Modifier.height(4.dp))
+
+        Box(
+            modifier = Modifier
+                .width(titleWidthDp)
+                .height(2.dp)
+                .background(
+                    MaterialTheme.colorScheme.primary,
+                    RoundedCornerShape(2.dp)
+                )
+        )
+    }
+}
 
 
 
