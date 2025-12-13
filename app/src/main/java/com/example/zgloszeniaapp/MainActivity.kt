@@ -207,7 +207,8 @@ fun AppScreen() {
     var userName by rememberSaveable { mutableStateOf(UserPrefs.getName(context) ?: "") }
     val userId = remember { UserPrefs.getOrCreateUuid(context) }
 
-    var typ by rememberSaveable { mutableStateOf<String?>(draft.typ ?: Config.SHEET_GABARYTY) }
+    var typ by rememberSaveable { mutableStateOf<String?>(draft.typ) }
+
     var adres by rememberSaveable { mutableStateOf(draft.adres) }
     var opis by rememberSaveable { mutableStateOf(draft.opis) }
 
@@ -255,6 +256,13 @@ fun AppScreen() {
         if (showBanner && message == "OK") {
             adres = ""
             opis = ""
+
+            // reset wyboru gabarytów ⬅⬅⬅ TO JEST WAŻNE
+            catRozne = false
+            catBio = false
+            catOpony = false
+            typ = null
+
             photoBitmap1 = null
             photoFile1Path?.let { runCatching { File(it).delete() } }
             photoFile1Path = null
@@ -293,6 +301,8 @@ fun AppScreen() {
                     detectTapGestures { focusManager.clearFocus() }
                 }
         ) {
+
+            // ====== CAŁA ZAWARTOŚĆ EKRANU MUSI BYĆ W JEDNEJ COLUMN ======
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -314,14 +324,13 @@ fun AppScreen() {
                     Text(
                         text = "ZGŁOSZENIA",
                         color = MaterialTheme.colorScheme.primary,
-                        fontSize = 22.sp, //zmniejszamy czcionke zgłoszenia
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.Medium,
                         onTextLayout = { result ->
                             val widthPx = result.size.width
-                            titleWidthDp = with(density) { widthPx.toDp() }   // <<< UŻYWAMY density
+                            titleWidthDp = with(density) { widthPx.toDp() }
                         }
                     )
-
 
                     Spacer(Modifier.height(4.dp))
 
@@ -344,7 +353,7 @@ fun AppScreen() {
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(0.8f), // dokładnie jak adres
+                        modifier = Modifier.fillMaxWidth(0.8f), // jak adres
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -361,11 +370,7 @@ fun AppScreen() {
                     }
                 }
 
-
-            }
-
-
-                // --- pole ADRES w stylu kreski jak w KD ---
+                // --- pole ADRES ---
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -388,14 +393,14 @@ fun AppScreen() {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 30.dp, bottom = 4.dp), // tu obnizamy napis typ gabarytow
+                            .padding(top = 30.dp, bottom = 4.dp),
                         textAlign = TextAlign.Center
                     )
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 16.dp),    // <<< TU OBNIŻASZ OPCJE rozne/bio/opony
+                            .padding(top = 16.dp),
                         horizontalArrangement = Arrangement.Center
                     ) {
                         CategoryOption(
@@ -415,283 +420,160 @@ fun AppScreen() {
                         )
                     }
                 } else {
-                    OutlinedTextField(
-                        value = opis,
-                        onValueChange = { opis = it },
-                        label = { Text("Opis") },
-                        minLines = 3,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 80.dp)
-                            .shadow(8.dp, RoundedCornerShape(18.dp))
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.surface,
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                                    )
-                                ),
-                                shape = RoundedCornerShape(18.dp)
-                            ),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                            disabledBorderColor = MaterialTheme.colorScheme.outline,
-                            focusedLabelColor = MaterialTheme.colorScheme.primary,
-                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        textStyle = MaterialTheme.typography.bodyLarge
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        OpisFieldUnderline(
+                            value = opis,
+                            onValueChange = { opis = it },
+                            modifier = Modifier.fillMaxWidth(0.8f)
+                        )
+                    }
+
                 }
 
                 // --- zdjęcia (jeśli PHOTOS_ENABLED) ---
                 if (PHOTOS_ENABLED) {
                     Spacer(Modifier.height(8.dp))
-                    PhotoSlot(
-                        label = "Zdjęcie 1",
-                        bitmap = photoBitmap1,
-                        photoFilePath = photoFile1Path,
-                        onTake = {
-                            val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
-                            val uri = FileProvider.getUriForFile(
-                                context, "${context.packageName}.fileprovider", file
-                            )
-                            photoFile1Path = file.absolutePath
-                            takePictureLauncher1.launch(uri)
-                        },
-                        onRetake = {
-                            val file = createImageFile(context, "photo1_${System.currentTimeMillis()}")
-                            val uri = FileProvider.getUriForFile(
-                                context, "${context.packageName}.fileprovider", file
-                            )
-                            photoFile1Path = file.absolutePath
-                            takePictureLauncher1.launch(uri)
-                        },
-                        onClear = {
-                            photoBitmap1 = null
-                            photoFile1Path?.let { path -> runCatching { File(path).delete() } }
-                            photoFile1Path = null
-                        }
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-                    PhotoSlot(
-                        label = "Zdjęcie 2",
-                        bitmap = photoBitmap2,
-                        photoFilePath = photoFile2Path,
-                        onTake = {
-                            val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
-                            val uri = FileProvider.getUriForFile(
-                                context, "${context.packageName}.fileprovider", file
-                            )
-                            photoFile2Path = file.absolutePath
-                            takePictureLauncher2.launch(uri)
-                        },
-                        onRetake = {
-                            val file = createImageFile(context, "photo2_${System.currentTimeMillis()}")
-                            val uri = FileProvider.getUriForFile(
-                                context, "${context.packageName}.fileprovider", file
-                            )
-                            photoFile2Path = file.absolutePath
-                            takePictureLauncher2.launch(uri)
-                        },
-                        onClear = {
-                            photoBitmap2 = null
-                            photoFile2Path?.let { File(it).delete() }
-                            photoFile2Path = null
-                        }
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-                    PhotoSlot(
-                        label = "Zdjęcie 3",
-                        bitmap = photoBitmap3,
-                        photoFilePath = photoFile3Path,
-                        onTake = {
-                            val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
-                            val uri = FileProvider.getUriForFile(
-                                context, "${context.packageName}.fileprovider", file
-                            )
-                            photoFile3Path = file.absolutePath
-                            takePictureLauncher3.launch(uri)
-                        },
-                        onRetake = {
-                            val file = createImageFile(context, "photo3_${System.currentTimeMillis()}")
-                            val uri = FileProvider.getUriForFile(
-                                context, "${context.packageName}.fileprovider", file
-                            )
-                            photoFile3Path = file.absolutePath
-                            takePictureLauncher3.launch(uri)
-                        },
-                        onClear = {
-                            photoBitmap3 = null
-                            photoFile3Path?.let { File(it).delete() }
-                            photoFile3Path = null
-                        }
-                    )
-
+                    // (Tu zostaw swój istniejący kod PhotoSlot 1/2/3)
                     Spacer(Modifier.height(12.dp))
                 }
+
 
                 // --- PRZYCISK WYŚLIJ ---
                 val vm = remember { SendVm() }
                 val hasOpis = opis.trim().isNotBlank()
                 val hasPhoto = PHOTOS_ENABLED && (
-                        photoFile1Path != null ||
-                                photoFile2Path != null ||
-                                photoFile3Path != null
+                        photoFile1Path != null || photoFile2Path != null || photoFile3Path != null
                         )
 
-                Button(
-                    enabled = when (typ) {
-                        Config.SHEET_GABARYTY ->
-                            !isSending &&
-                                    !showBanner &&
-                                    userName.isNotBlank() &&
-                                    adres.trim().length >= 3 &&
-                                    (catRozne || catBio || catOpony)
+                // Przyciski: wybierz styl:
+                // A) pełna szerokość (stabilnie, "google’owo"):
 
-                        Config.SHEET_ZLECENIA ->
-                            !isSending &&
-                                    !showBanner &&
-                                    userName.isNotBlank() &&
-                                    adres.trim().length >= 3 &&
-                                    (hasOpis || hasPhoto)
 
-                        else -> false
-                    },
-                    onClick = {
-                        if (typ == null) {
-                            message = "Zaznacz typ zgłoszenia"
-                            return@Button
-                        }
-                        if (adres.trim().length < 3) {
-                            message = "Podaj poprawny adres"
-                            return@Button
-                        }
 
-                        when (typ) {
-                            Config.SHEET_GABARYTY -> {
-                                if (!catRozne && !catBio && !catOpony) {
-                                    message = "Wybierz kategorię gabarytów"
-                                    return@Button
-                                }
-                            }
-
-                            Config.SHEET_ZLECENIA -> {
-                                if (!hasOpis && !hasPhoto) {
-                                    message = if (PHOTOS_ENABLED) {
-                                        "Podaj opis lub dodaj zdjęcie"
-                                    } else {
-                                        "Podaj opis"
-                                    }
-                                    return@Button
-                                }
-                            }
-                        }
-
-                        val finalOpis = when (typ) {
-                            Config.SHEET_GABARYTY -> {
-                                val parts = mutableListOf<String>()
-                                if (catRozne) parts.add("różne")
-                                if (catBio) parts.add("BIO")
-                                if (catOpony) parts.add("opony")
-                                parts.joinToString(", ")
-                            }
-
-                            Config.SHEET_ZLECENIA -> opis.trim()
-                            else -> opis.trim()
-                        }
-
-                        isSending = true
-                        message = null
-                        Log.d("API_URL", Config.WEB_APP_URL)
-
-                        val payload = JSONObject().apply {
-                            put("sekret", Config.SECRET_TOKEN)
-                            put("typ", typ!!)
-                            put("ulica_adres", adres.trim())
-                            put("opis", finalOpis)
-                            put("uzytkownik", userName.trim())
-                            put("urz_uuid", userId)
-                            put("wersja_apki", Config.APP_VERSION)
-                            put("timestamp_client", System.currentTimeMillis())
-
-                            photoFile1Path?.let { path ->
-                                val f = File(path)
-                                put("photo1", fileToBase64Original(f))
-                                put(
-                                    "fileName1",
-                                    f.name.ifBlank { "zdjecie1_${System.currentTimeMillis()}.jpg" }
-                                )
-                            }
-                            photoFile2Path?.let { path ->
-                                val f = File(path)
-                                put("photo2", fileToBase64Original(f))
-                                put(
-                                    "fileName2",
-                                    f.name.ifBlank { "zdjecie2_${System.currentTimeMillis()}.jpg" }
-                                )
-                            }
-                            photoFile3Path?.let { path ->
-                                val f = File(path)
-                                put("photo3", fileToBase64Original(f))
-                                put(
-                                    "fileName3",
-                                    f.name.ifBlank { "zdjecie3_${System.currentTimeMillis()}.jpg" }
-                                )
-                            }
-                        }
-
-                        Log.d("API_DEBUG", "URL: ${Config.WEB_APP_URL}")
-                        Log.d(
-                            "API_DEBUG", "Payload keys: " +
-                                    listOfNotNull(
-                                        photoFile1Path?.let { "photo1" },
-                                        photoFile2Path?.let { "photo2" },
-                                        photoFile3Path?.let { "photo3" }
-                                    )
-                        )
-
-                        vm.send(
-                            url = Config.WEB_APP_URL,
-                            payload = payload
-                        ) { ok, msg ->
-                            isSending = false
-                            Log.d("RESPONSE_DEBUG", "Response message: $msg")
-                            message = if (ok) "OK" else "Błąd: $msg"
-                            showBanner = ok
-                        }
-                    },
-                    modifier = Modifier
-                        .wrapContentWidth()
-                        .align(Alignment.CenterHorizontally)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    Text(if (isSending) "Wysyłanie..." else "Wyślij")
+                    Button(
+                        enabled = when (typ) {
+                            Config.SHEET_GABARYTY ->
+                                !isSending &&
+                                        !showBanner &&
+                                        userName.isNotBlank() &&
+                                        adres.trim().length >= 3 &&
+                                        (catRozne || catBio || catOpony)
+
+                            Config.SHEET_ZLECENIA ->
+                                !isSending &&
+                                        !showBanner &&
+                                        userName.isNotBlank() &&
+                                        adres.trim().length >= 3 &&
+                                        (hasOpis || hasPhoto)
+
+                            else -> false
+                        },
+                        onClick = {
+
+                            if (typ == null) {
+                                message = "Zaznacz typ zgłoszenia"
+                                return@Button
+                            }
+                            if (adres.trim().length < 3) {
+                                message = "Podaj poprawny adres"
+                                return@Button
+                            }
+
+                            when (typ) {
+                                Config.SHEET_GABARYTY -> {
+                                    if (!catRozne && !catBio && !catOpony) {
+                                        message = "Wybierz kategorię gabarytów"
+                                        return@Button
+                                    }
+                                }
+
+                                Config.SHEET_ZLECENIA -> {
+                                    if (!hasOpis && !hasPhoto) {
+                                        message =
+                                            if (PHOTOS_ENABLED) "Podaj opis lub dodaj zdjęcie" else "Podaj opis"
+                                        return@Button
+                                    }
+                                }
+                            }
+
+                            val finalOpis = when (typ) {
+                                Config.SHEET_GABARYTY -> {
+                                    val parts = mutableListOf<String>()
+                                    if (catRozne) parts.add("różne")
+                                    if (catBio) parts.add("BIO")
+                                    if (catOpony) parts.add("opony")
+                                    parts.joinToString(", ")
+                                }
+
+                                Config.SHEET_ZLECENIA -> opis.trim()
+                                else -> opis.trim()
+                            }
+
+                            isSending = true
+                            message = null
+
+                            val payload = JSONObject().apply {
+                                put("sekret", Config.SECRET_TOKEN)
+                                put("typ", typ!!)
+                                put("ulica_adres", adres.trim())
+                                put("opis", finalOpis)
+                                put("uzytkownik", userName.trim())
+                                put("urz_uuid", userId)
+                                put("wersja_apki", Config.APP_VERSION)
+                                put("timestamp_client", System.currentTimeMillis())
+
+                                photoFile1Path?.let { path ->
+                                    val f = File(path)
+                                    put("photo1", fileToBase64Original(f))
+                                    put("fileName1", f.name.ifBlank { "zdjecie1_${System.currentTimeMillis()}.jpg" })
+                                }
+                                photoFile2Path?.let { path ->
+                                    val f = File(path)
+                                    put("photo2", fileToBase64Original(f))
+                                    put("fileName2", f.name.ifBlank { "zdjecie2_${System.currentTimeMillis()}.jpg" })
+                                }
+                                photoFile3Path?.let { path ->
+                                    val f = File(path)
+                                    put("photo3", fileToBase64Original(f))
+                                    put("fileName3", f.name.ifBlank { "zdjecie3_${System.currentTimeMillis()}.jpg" })
+                                }
+                            }
+
+                            vm.send(
+                                url = Config.WEB_APP_URL,
+                                payload = payload
+                            ) { ok, msg ->
+                                isSending = false
+                                message = if (ok) "OK" else "Błąd: $msg"
+                                showBanner = ok
+                            }
+                        },
+                        modifier = Modifier.wrapContentWidth()
+                    ) {
+                        Text(if (isSending) "Wysyłanie..." else "Wyślij")
+                    }
                 }
 
-                Log.d("UI_DEBUG", "Stan message: $message, showBanner: $showBanner")
-            }
-
-            // baner nad wszystkim
-            if (showBanner && message == "OK") {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 32.dp)
-                        .zIndex(1f),
-                    contentAlignment = Alignment.Center
-
-                ) {
+                if (showBanner && message == "OK") {
                     SuccessBanner(
                         "Zgłoszenie zostało wysłane ✅",
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
                     )
                 }
+
             }
         }
     }
+}
 
 
 
@@ -700,7 +582,7 @@ fun AppScreen() {
 
 
 
-@Composable
+    @Composable
 fun SuccessBanner(text: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
@@ -1288,5 +1170,63 @@ fun CategoryOption(
         }
     }
 }
+
+@Composable
+fun OpisFieldUnderline(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val lineColor = if (value.trim().isNotEmpty()) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+
+    Column(modifier = modifier) {
+
+        TextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = false,
+            minLines = 1,
+            maxLines = 6,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = {
+                Text(
+                    text = "Opis",
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Light
+                )
+            },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium
+            ),
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                cursorColor = MaterialTheme.colorScheme.primary
+            )
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(lineColor)
+        )
+    }
+}
+
+
+
 
 
