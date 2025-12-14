@@ -56,6 +56,8 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
+
 
     dependencies {
         implementation(platform("androidx.compose:compose-bom:2024.05.00"))

@@ -111,7 +111,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.saveable.rememberSaveable
 
 import android.graphics.Matrix
-import android.media.ExifInterface
+import androidx.exifinterface.media.ExifInterface
+
 import androidx.compose.ui.zIndex
 
 import androidx.compose.ui.input.pointer.pointerInput
@@ -147,6 +148,16 @@ import androidx.compose.ui.unit.Density
 
 import androidx.activity.compose.BackHandler
 import com.example.zgloszeniaapp.ui.theme.ZgloszeniaAPPTheme
+
+
+
+
+
+
+
+
+
+
 
 
 private const val PHOTOS_ENABLED = false //import wylacza zdjecia
@@ -221,7 +232,8 @@ fun AppScreen() {
     var userName by rememberSaveable { mutableStateOf(UserPrefs.getName(context) ?: "") }
     val userId = remember { UserPrefs.getOrCreateUuid(context) }
 
-    var typ by rememberSaveable { mutableStateOf<String?>(draft.typ) }
+    var typ by rememberSaveable { mutableStateOf(draft.typ ?: Config.SHEET_GABARYTY) }
+    var typPicked by rememberSaveable { mutableStateOf(false) }
 
     var screen by rememberSaveable { mutableStateOf(Screen.ZGLOSZENIA) }
     BackHandler(enabled = screen == Screen.WODOMIERZE) {
@@ -234,6 +246,15 @@ fun AppScreen() {
     var adres by rememberSaveable { mutableStateOf(draft.adres) }
     var opis by rememberSaveable { mutableStateOf(draft.opis) }
 
+    // --- WODOMIERZE: stan formularza (trwa dopóki nie wyślesz)
+    var wodAdres by rememberSaveable { mutableStateOf("") }
+    var wodNumer by rememberSaveable { mutableStateOf("") }
+    var wodStan by rememberSaveable { mutableStateOf("") }
+    var wodPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var wodPhotoBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+
+
     // kategorie gabarytów
     var catRozne by rememberSaveable { mutableStateOf(false) }
     var catBio by rememberSaveable { mutableStateOf(false) }
@@ -242,6 +263,7 @@ fun AppScreen() {
     // zdjęcia
     var photoFile1Path by rememberSaveable { mutableStateOf<String?>(null) }
     var photoBitmap1 by remember { mutableStateOf<Bitmap?>(null) }
+
     var photoFile2Path by rememberSaveable { mutableStateOf<String?>(null) }
     var photoBitmap2 by remember { mutableStateOf<Bitmap?>(null) }
     var photoFile3Path by rememberSaveable { mutableStateOf<String?>(null) }
@@ -273,6 +295,15 @@ fun AppScreen() {
     var message by remember { mutableStateOf<String?>(null) }
     var showBanner by remember { mutableStateOf(false) }
 
+    fun clearWodomierze() {
+        wodAdres = ""
+        wodNumer = ""
+        wodStan = ""
+        wodPhotoPath?.let { runCatching { File(it).delete() } }
+        wodPhotoPath = null
+        wodPhotoBitmap = null
+    }
+
     // auto-czyszczenie formularza po OK
     LaunchedEffect(showBanner, message) {
         if (showBanner && message == "OK") {
@@ -283,7 +314,10 @@ fun AppScreen() {
             catRozne = false
             catBio = false
             catOpony = false
-            typ = null
+            typ = Config.SHEET_GABARYTY
+            typPicked = false
+
+
 
             photoBitmap1 = null
             photoFile1Path?.let { runCatching { File(it).delete() } }
@@ -295,6 +329,7 @@ fun AppScreen() {
             photoFile3Path?.let { runCatching { File(it).delete() } }
             photoFile3Path = null
 
+            clearWodomierze()
             context.clearDraft()
 
             kotlinx.coroutines.delay(3000)
@@ -322,6 +357,7 @@ fun AppScreen() {
 
             // ====== TREŚĆ EKRANU ======
             when (screen) {
+
                 Screen.ZGLOSZENIA -> {
                     ZgloszeniaScreen(
                         padding = PaddingValues(0.dp),
@@ -330,6 +366,9 @@ fun AppScreen() {
 
                         typ = typ,
                         onTypChange = { typ = it },
+
+                        typPicked = typPicked,
+                        onTypPickedChange = { typPicked = it },
 
                         adres = adres,
                         onAdresChange = { adres = it },
@@ -368,10 +407,35 @@ fun AppScreen() {
                     WodomierzeScreen(
                         padding = PaddingValues(0.dp),
                         userName = userName,
-                        userId = userId
+                        userId = userId,
+
+                        adres = wodAdres,
+                        onAdresChange = { wodAdres = it },
+
+                        numerWodomierza = wodNumer,
+                        onNumerWodomierzaChange = { wodNumer = it },
+
+                        stan = wodStan,
+                        onStanChange = { wodStan = it },
+
+                        photoPath = wodPhotoPath,
+                        onPhotoPathChange = { wodPhotoPath = it },
+
+                        photoBitmap = wodPhotoBitmap,
+                        onPhotoBitmapChange = { wodPhotoBitmap = it },
+
+
+                        onAfterSendClear = {
+                            wodAdres = ""
+                            wodNumer = ""
+                            wodStan = ""
+                            wodPhotoPath?.let { runCatching { File(it).delete() } }
+                            wodPhotoPath = null
+                        }
                     )
                 }
             }
+
 
             // ====== MENU (3 KROPKI) W PRAWYM GÓRNYM ROGU ======
             Box(
@@ -406,14 +470,17 @@ fun AppScreen() {
 }
 
 
-    @Composable
+@Composable
 fun ZgloszeniaScreen(
     padding: PaddingValues,
     focusManager: androidx.compose.ui.focus.FocusManager,
     density: Density,
 
     typ: String?,
-    onTypChange: (String?) -> Unit,
+    onTypChange: (String) -> Unit,
+
+    typPicked: Boolean,
+    onTypPickedChange: (Boolean) -> Unit,
 
     adres: String,
     onAdresChange: (String) -> Unit,
@@ -446,9 +513,10 @@ fun ZgloszeniaScreen(
     photoFile2Path: String?,
     photoFile3Path: String?
 ) {
-    val scroll = rememberScrollState()
 
-    // SendVm w screenie (żeby działało bez kombinowania)
+
+    val scroll = rememberScrollState()
+        // SendVm w screenie (żeby działało bez kombinowania)
     val vm = remember { SendVm() }
 
     // do walidacji zleceń
@@ -492,14 +560,26 @@ fun ZgloszeniaScreen(
                 ) {
                     TypeTab(
                         label = "Gabaryty",
-                        selected = typ == Config.SHEET_GABARYTY,
-                        onClick = { onTypChange(Config.SHEET_GABARYTY) }
+                        selected = typPicked && typ == Config.SHEET_GABARYTY,
+                        onClick = {
+                            onTypChange(Config.SHEET_GABARYTY)
+                            onTypPickedChange(true)
+
+                        }
                     )
+
+
                     TypeTab(
                         label = "Zlecenia",
-                        selected = typ == Config.SHEET_ZLECENIA,
-                        onClick = { onTypChange(Config.SHEET_ZLECENIA) }
+                        selected = typPicked && typ == Config.SHEET_ZLECENIA,
+                        onClick = {
+                            onTypChange(Config.SHEET_ZLECENIA)
+                            onTypPickedChange(true)
+
+                        }
                     )
+
+
                 }
             }
 
@@ -574,6 +654,8 @@ fun ZgloszeniaScreen(
                 }
 
             } else {
+                Spacer(Modifier.height(10.dp)) // ⬅️ OBNIŻAMY OPIS
+
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
@@ -585,6 +667,7 @@ fun ZgloszeniaScreen(
                     )
                 }
             }
+
 
             // --- zdjęcia (jeśli PHOTOS_ENABLED) ---
             if (PHOTOS_ENABLED) {
@@ -852,7 +935,7 @@ fun NameDialog(onSave: (String) -> Unit) {
             TextButton(
                 enabled = temp.trim().length >= 3,
                 onClick = { onSave(temp.trim()) }
-            ) { Text("Zapisz") }
+            ) { Text("Wyślij") }
         },
         title = { Text("Imię i nazwisko") },
         text = {
@@ -1077,6 +1160,50 @@ data class Draft(
     val adres: String,
     val opis: String
 )
+
+fun decodeSampledBitmapFromFileRotated(path: String, maxSide: Int = 2048): Bitmap? {
+    return try {
+        // 1) bounds
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+
+        val w0 = bounds.outWidth
+        val h0 = bounds.outHeight
+        if (w0 <= 0 || h0 <= 0) return null
+
+        // 2) sample
+        var inSample = 1
+        val bigger = maxOf(w0, h0)
+        while ((bigger / inSample) > maxSide) inSample *= 2
+
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = inSample
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+
+        val bmp = BitmapFactory.decodeFile(path, opts) ?: return null
+
+        // 3) EXIF degrees
+        val exif = ExifInterface(path)
+        val exifDeg = exif.rotationDegrees
+
+        // fallback: jeśli EXIF nic nie mówi, a bitmapa jest pozioma -> obróć w pion
+        val degrees = if (exifDeg == 0 && bmp.width > bmp.height) 90 else exifDeg
+
+        Log.d("WODOMIERZ_EXIF", "exifDeg=$exifDeg usedDeg=$degrees w=${bmp.width} h=${bmp.height}")
+
+        if (degrees == 0) bmp
+        else {
+            val m = Matrix().apply { postRotate(degrees.toFloat()) }
+            Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+        }
+    } catch (e: Exception) {
+        Log.e("WODOMIERZ_EXIF", "rotate failed: ${e.message}", e)
+        null
+    }
+}
+
+
 
 object DraftKeys {
     const val FILE = "form_draft"
@@ -1368,24 +1495,103 @@ fun OpisFieldUnderline(
     }
 }
 
+
 @Composable
 fun WodomierzeScreen(
     padding: PaddingValues,
     userName: String,
-    userId: String
+    userId: String,
+
+    adres: String,
+    onAdresChange: (String) -> Unit,
+
+    numerWodomierza: String,
+    onNumerWodomierzaChange: (String) -> Unit,
+
+    stan: String,
+    onStanChange: (String) -> Unit,
+
+    photoPath: String?,
+    onPhotoPathChange: (String?) -> Unit,
+
+    photoBitmap: Bitmap?,
+    onPhotoBitmapChange: (Bitmap?) -> Unit,
+
+    onAfterSendClear: () -> Unit
 ) {
+
     val focusManager = LocalFocusManager.current
     val scroll = rememberScrollState()
 
-    var adres by rememberSaveable { mutableStateOf("") }
-    var numerWodomierza by rememberSaveable { mutableStateOf("") }
-    var stan by rememberSaveable { mutableStateOf("") }
+    var showPhotoPreview by remember { mutableStateOf(false) }
+
+    // ===== WODOMIERZE - STAN MA BYĆ W AppScreen (żeby nie znikało po cofnięciu) =====
+
+
+
+
+
+
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && photoPath != null) {
+            onPhotoBitmapChange(decodeSampledBitmapFromFileRotated(photoPath, maxSide = 2048))
+        }
+    }
+
+
+
+    // Aparat: prosimy o uprawnienie i dopiero wtedy odpalamy TakePicture
+    val context = LocalContext.current
+    lateinit var takePhoto: () -> Unit
+
+
+    val cameraPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            takePhoto()
+        } else {
+            Toast.makeText(context, "Brak zgody na aparat", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
+
+    // Robi plik w cache + odpala aparat (bez zapisu do galerii)
+    takePhoto = {
+        try {
+            val file = createImageFile(context, "photo_wodomierz_")
+            onPhotoPathChange(file.absolutePath)
+
+
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                file
+            )
+
+            takePictureLauncher.launch(uri)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(
+                context,
+                "Błąd aparatu: ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+
 
     val canSave =
         userName.isNotBlank() &&
                 adres.trim().length >= 3 &&
                 numerWodomierza.trim().isNotBlank() &&
-                stan.trim().isNotBlank()
+                stan.trim().isNotBlank() &&
+                photoBitmap != null
+
 
     Box(
         modifier = Modifier
@@ -1403,37 +1609,27 @@ fun WodomierzeScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            // nagłówek jak w zgłoszeniach (jeśli chcesz, możesz usunąć)
-            Text(
-                text = "WODOMIERZE",
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Medium
-            )
+            ScreenTitleWithUnderline(title = "WODOMIERZE")
+            Spacer(Modifier.height(16.dp))
 
-            Spacer(Modifier.height(8.dp))
-
-            // Adres - ten sam styl co u Ciebie
             AddressField(
                 value = adres,
-                onValueChange = { adres = it },
+                onValueChange = onAdresChange,
                 modifier = Modifier.fillMaxWidth(0.8f)
             )
 
-            // Numer wodomierza - proste pole z kreską (tak jak opis/adres)
             UnderlineInput(
                 value = numerWodomierza,
-                onValueChange = { numerWodomierza = it },
+                onValueChange = onNumerWodomierzaChange,
                 placeholder = "Numer wodomierza",
                 modifier = Modifier.fillMaxWidth(0.8f),
                 singleLine = true
             )
 
-            // Stan - tylko cyfry / przecinek / kropka (żeby było wygodniej)
             UnderlineInput(
                 value = stan,
                 onValueChange = { new ->
-                    stan = new.filter { it.isDigit() || it == '.' || it == ',' }
+                    onStanChange(new.filter { it.isDigit() || it == '.' || it == ',' })
                 },
                 placeholder = "Stan",
                 modifier = Modifier.fillMaxWidth(0.8f),
@@ -1441,18 +1637,78 @@ fun WodomierzeScreen(
                 keyboardType = KeyboardType.Number
             )
 
+
+
+
+            // ====== ZDJĘCIE (1 SLOT) ======
             Spacer(Modifier.height(8.dp))
+
+            if (photoBitmap == null) {
+                Button(
+                    onClick = { takePhoto() },
+                    modifier = Modifier.fillMaxWidth(0.8f)
+                ) {
+                    Text("Zrób zdjęcie wodomierza")
+                }
+            } else {
+                Image(
+                    bitmap = photoBitmap!!.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth(0.8f)
+                        .height(180.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable { showPhotoPreview = true },
+                    contentScale = ContentScale.Crop
+                )
+
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(0.8f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { takePhoto() },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Zmień") }
+
+                    OutlinedButton(
+                        onClick = {
+                            onPhotoBitmapChange(null)
+                            photoPath?.let { runCatching { File(it).delete() } }
+                            onPhotoPathChange(null)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Usuń") }
+                }
+            }
+
+            if (showPhotoPreview && photoBitmap != null) {
+                FullscreenImageDialog(
+                    bitmap = photoBitmap!!,
+                    onClose = { showPhotoPreview = false }
+                )
+            }
+
+
 
             Button(
                 enabled = canSave,
                 onClick = {
-                    // NA RAZIE puste
-                    // w następnym kroku: robimy 1 zdjęcie + wysyłkę do Apps Script
-                },
-                modifier = Modifier.wrapContentWidth()
-            ) {
-                Text("Zapisz")
-            }
+                    // 1) wysyłka (Twoja funkcja)
+                    val ok = true // <- tu wstaw wynik swojej wysyłki (np. success)
+
+                    // 2) jeśli się udało – czyścimy
+                    if (ok) {
+                        onAfterSendClear()
+                    }
+                }
+            ) { Text("Wyślij") }
+
+
+
         }
     }
 }
@@ -1555,5 +1811,40 @@ fun ScreenTitleWithUnderline(
     }
 }
 
+@Composable
+fun FullscreenImageDialog(
+    bitmap: Bitmap,
+    onClose: () -> Unit
+) {
+    Dialog(onDismissRequest = onClose) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            // obraz na cały ekran
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+
+            // X w prawym górnym rogu
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Zamknij",
+                    tint = Color.White
+                )
+            }
+        }
+    }
+}
 
 
