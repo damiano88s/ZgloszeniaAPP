@@ -149,6 +149,10 @@ import androidx.compose.ui.unit.Density
 import androidx.activity.compose.BackHandler
 import com.example.zgloszeniaapp.ui.theme.ZgloszeniaAPPTheme
 
+import android.os.Handler
+import android.os.Looper
+
+
 
 
 
@@ -431,7 +435,9 @@ fun AppScreen() {
                             wodStan = ""
                             wodPhotoPath?.let { runCatching { File(it).delete() } }
                             wodPhotoPath = null
+                            wodPhotoBitmap = null
                         }
+
                     )
                 }
             }
@@ -957,6 +963,7 @@ class SendVm : ViewModel() {
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     fun send(
         url: String,
@@ -973,15 +980,20 @@ class SendVm : ViewModel() {
 
         client.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                onDone(false, "Błąd sieci: ${e.message}")
+                mainHandler.post {
+                    onDone(false, "Błąd sieci: ${e.message}")
+                }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     val msg = it.body?.string() ?: ""
-                    onDone(it.isSuccessful, msg)
+                    mainHandler.post {
+                        onDone(it.isSuccessful, msg)
+                    }
                 }
             }
+
         })
     }
 } // <-- Poprawnie zamknięta klasa
@@ -1005,11 +1017,10 @@ private suspend fun postJson(url: String, json: JSONObject): Pair<Boolean, Strin
 
             android.util.Log.d("API_RESPONSE", "Kod: $code, Body: $body")
 
-            if (code in 200..299 && body.contains("\"status\":\"OK\"")) {
-                true to "Zapisano ✅"
-            } else {
-                false to "Błąd serwera: $body"
-            }
+            val msg = "HTTP $code | $body"
+            val ok = (code in 200..299 && body.contains("\"status\":\"OK\""))
+            ok to msg
+
         } catch (e: Exception) {
             false to "Brak internetu lub błąd: ${e.message}"
         }
@@ -1039,6 +1050,38 @@ fun buildJson(
     if (photoBase64 != null) put("photo", photoBase64)
     if (fileName != null) put("fileName", fileName)
 }
+
+fun buildJsonWodomierze(
+    adres: String,
+    numerWodomierza: String,
+    stan: String,
+    user: String,
+    uuid: String,
+    appVersion: String,
+    photoBase64: String?,
+    fileName: String?
+): JSONObject = JSONObject().apply {
+    put("sekret", Config.SECRET_TOKEN) // jeśli nie używasz w Apps Script, może zostać
+    put("typ", "Wodomierze")
+
+    // Apps Script czyta: data.adres || data.ulica_adres
+    put("adres", adres)
+
+    // Apps Script czyta: data.nr_wodomierza
+    put("nr_wodomierza", numerWodomierza)
+
+    put("stan", stan)
+
+    put("uzytkownik", user)
+    put("urz_uuid", uuid)
+    put("wersja_apki", appVersion)
+    put("timestamp_client", System.currentTimeMillis().toString())
+
+    // Apps Script wymaga: photo1 + fileName1
+    if (!photoBase64.isNullOrBlank()) put("photo1", photoBase64)
+    if (!fileName.isNullOrBlank()) put("fileName1", fileName)
+}
+
 
 fun bitmapToBase64(bitmap: Bitmap): String {
     val outputStream = ByteArrayOutputStream()
@@ -1525,9 +1568,13 @@ fun WodomierzeScreen(
 
     var showPhotoPreview by remember { mutableStateOf(false) }
 
-    // ===== WODOMIERZE - STAN MA BYĆ W AppScreen (żeby nie znikało po cofnięciu) =====
 
 
+
+    var isSending by rememberSaveable { mutableStateOf(false) }
+    var sendError by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val vm = remember { SendVm() }
 
 
 
@@ -1693,19 +1740,58 @@ fun WodomierzeScreen(
             }
 
 
-
             Button(
-                enabled = canSave,
+                enabled = canSave && !isSending,
                 onClick = {
-                    // 1) wysyłka (Twoja funkcja)
-                    val ok = true // <- tu wstaw wynik swojej wysyłki (np. success)
+                    sendError = null
+                    isSending = true
 
-                    // 2) jeśli się udało – czyścimy
-                    if (ok) {
-                        onAfterSendClear()
+                    sendError = null
+                    isSending = true
+
+                    val photoB64 = photoPath?.let { path ->
+                        fileToBase64Original(File(path))
                     }
+
+                    val fileName = "wodomierz_${System.currentTimeMillis()}.jpg"
+
+                    val payload = buildJsonWodomierze(
+                        adres = adres.trim(),
+                        numerWodomierza = numerWodomierza.trim(),
+                        stan = stan.trim(),
+                        user = userName,
+                        uuid = userId,
+                        appVersion = Config.APP_VERSION,
+                        photoBase64 = photoB64,
+                        fileName = fileName
+                    )
+
+                    vm.send(
+                        url = Config.WEB_APP_URL,
+                        payload = payload
+                    ) { ok, msg ->
+                        isSending = false
+
+                        // msg to odpowiedź z Apps Script
+                        sendError = "RESP: $msg"
+
+                        if (ok && msg.contains("\"status\":\"OK\"")) {
+                            onAfterSendClear()
+                            Toast.makeText(context, "Zapisano ✅", Toast.LENGTH_SHORT).show()
+                            sendError = null
+                        }
+                    }
+
                 }
-            ) { Text("Wyślij") }
+            ) {
+                Text(if (isSending) "Wysyłam..." else "Wyślij")
+            }
+
+            sendError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error) }
+
+
+
 
 
 
@@ -1846,5 +1932,6 @@ fun FullscreenImageDialog(
         }
     }
 }
+
 
 
