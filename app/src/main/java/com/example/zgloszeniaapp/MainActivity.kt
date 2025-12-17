@@ -1,166 +1,125 @@
 package com.example.zgloszeniaapp
 
+// Android core
 import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.util.Base64
+import android.util.Log
+import android.widget.Toast
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.content.pm.PackageManager
+import android.provider.MediaStore
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.graphics.Matrix
+import android.content.ContentValues
+import java.io.File
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import androidx.compose.ui.text.style.TextAlign
-import android.graphics.Bitmap
+import java.time.LocalDate
+import java.util.concurrent.TimeUnit
 
+// Activity / lifecycle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import android.util.Base64
-import java.io.ByteArrayOutputStream
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 
-import android.util.Log
-
-import android.widget.Toast
-import java.time.LocalDate
-
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.draw.clip
-
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+// Compose runtime
 import androidx.compose.runtime.*
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.LaunchedEffect
 
+// Compose UI core
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
+
+// Compose foundation
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
-
-import androidx.compose.ui.unit.dp
-
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.compose.ui.platform.LocalContext
+// Compose Material 3
+import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 
+// Material icons
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 
-import android.net.Uri
+// Window / dialog
+import androidx.compose.ui.window.Dialog
 
-import androidx.activity.compose.rememberLauncherForActivityResult
+// Keyboard / text
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
+// Coroutines
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-
+// Networking (OkHttp)
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 
-import java.io.IOException
-import java.util.concurrent.TimeUnit
-
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.LaunchedEffect
-import kotlinx.coroutines.delay
-
-import android.content.ContentValues
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.graphics.ImageDecoder
-
-import android.os.Build
-import android.provider.MediaStore
-
-import java.io.File
-
-import android.graphics.BitmapFactory
+// File provider / EXIF
 import androidx.core.content.FileProvider
-
-import androidx.compose.ui.window.Dialog
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.runtime.saveable.rememberSaveable
-
-import android.graphics.Matrix
 import androidx.exifinterface.media.ExifInterface
 
-import androidx.compose.ui.zIndex
-
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.pointerInteropFilter
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.platform.LocalFocusManager
-
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.ui.graphics.Brush
-
-import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.sp
-
-
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.ui.unit.Density
-
-import androidx.activity.compose.BackHandler
+// App theme
 import com.example.zgloszeniaapp.ui.theme.ZgloszeniaAPPTheme
+import org.json.JSONObject
 
-import android.os.Handler
-import android.os.Looper
-
-
-
-
-
-
-
-
-
-
+import androidx.compose.ui.graphics.ColorMatrix
 
 
 
@@ -354,9 +313,7 @@ fun AppScreen() {
     Scaffold { padding ->
 
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier = Modifier.fillMaxSize()
         ) {
 
             // ====== TREŚĆ EKRANU ======
@@ -364,7 +321,7 @@ fun AppScreen() {
 
                 Screen.ZGLOSZENIA -> {
                     ZgloszeniaScreen(
-                        padding = PaddingValues(0.dp),
+                        padding = padding,
                         focusManager = focusManager,
                         density = density,
 
@@ -409,7 +366,7 @@ fun AppScreen() {
 
                 Screen.WODOMIERZE -> {
                     WodomierzeScreen(
-                        padding = PaddingValues(0.dp),
+                        padding = padding,
                         userName = userName,
                         userId = userId,
 
@@ -481,51 +438,35 @@ fun ZgloszeniaScreen(
     padding: PaddingValues,
     focusManager: androidx.compose.ui.focus.FocusManager,
     density: Density,
-
     typ: String?,
     onTypChange: (String) -> Unit,
-
     typPicked: Boolean,
     onTypPickedChange: (Boolean) -> Unit,
-
     adres: String,
     onAdresChange: (String) -> Unit,
-
     opis: String,
     onOpisChange: (String) -> Unit,
-
     catRozne: Boolean,
     onCatRozne: (Boolean) -> Unit,
-
     catBio: Boolean,
     onCatBio: (Boolean) -> Unit,
-
     catOpony: Boolean,
     onCatOpony: (Boolean) -> Unit,
-
     isSending: Boolean,
     onIsSending: (Boolean) -> Unit,
-
     message: String?,
     onMessage: (String?) -> Unit,
-
     showBanner: Boolean,
     onShowBanner: (Boolean) -> Unit,
-
     userName: String,
     userId: String,
-
     photoFile1Path: String?,
     photoFile2Path: String?,
     photoFile3Path: String?
 ) {
-
-
     val scroll = rememberScrollState()
-        // SendVm w screenie (żeby działało bez kombinowania)
     val vm = remember { SendVm() }
 
-    // do walidacji zleceń
     val hasOpis = opis.trim().isNotBlank()
     val hasPhoto = PHOTOS_ENABLED && (
             photoFile1Path != null || photoFile2Path != null || photoFile3Path != null
@@ -535,16 +476,24 @@ fun ZgloszeniaScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
-            .pointerInput(Unit) {
-                detectTapGestures { focusManager.clearFocus() }
-            }
+            .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
     ) {
+
+        // ✅ LOGO TŁA (TU)
+        ZntLogoBackground(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 0.dp)
+        )
+
+        // ✅ UI (TU)
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
                 .verticalScroll(scroll)
-                .imePadding(),
+                .imePadding()
+                .zIndex(1f),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
 
@@ -557,10 +506,10 @@ fun ZgloszeniaScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 0.dp),
-                        contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(0.8f), // jak adres
+                    modifier = Modifier.fillMaxWidth(0.8f),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -570,10 +519,8 @@ fun ZgloszeniaScreen(
                         onClick = {
                             onTypChange(Config.SHEET_GABARYTY)
                             onTypPickedChange(true)
-
                         }
                     )
-
 
                     TypeTab(
                         label = "Zlecenia",
@@ -581,19 +528,11 @@ fun ZgloszeniaScreen(
                         onClick = {
                             onTypChange(Config.SHEET_ZLECENIA)
                             onTypPickedChange(true)
-
                         }
                     )
-
-
                 }
             }
 
-            Spacer(modifier = Modifier.height(0.dp))
-
-
-
-            // ⬇️ OBNIZAM POLE ADRESU
             Spacer(modifier = Modifier.height(10.dp))
 
             // --- pole ADRES ---
@@ -634,8 +573,8 @@ fun ZgloszeniaScreen(
                         text = "różne",
                         selected = catRozne,
                         onClick = {
-                            onCatRozne(!catRozne)   // tylko TO przełącz
-                            focusManager.clearFocus() // schowaj klawiaturę
+                            onCatRozne(!catRozne)
+                            focusManager.clearFocus()
                         }
                     )
 
@@ -656,11 +595,10 @@ fun ZgloszeniaScreen(
                             focusManager.clearFocus()
                         }
                     )
-
                 }
 
             } else {
-                Spacer(Modifier.height(10.dp)) // ⬅️ OBNIŻAMY OPIS
+                Spacer(Modifier.height(10.dp))
 
                 Box(
                     modifier = Modifier.fillMaxWidth(),
@@ -674,11 +612,9 @@ fun ZgloszeniaScreen(
                 }
             }
 
-
             // --- zdjęcia (jeśli PHOTOS_ENABLED) ---
             if (PHOTOS_ENABLED) {
                 Spacer(Modifier.height(8.dp))
-                // zostawiasz swój kod PhotoSlot 1/2/3 jeśli kiedyś włączysz
                 Spacer(Modifier.height(12.dp))
             }
 
@@ -755,7 +691,6 @@ fun ZgloszeniaScreen(
                             put("wersja_apki", Config.APP_VERSION)
                             put("timestamp_client", System.currentTimeMillis())
 
-                            // zdjęcia tylko jeśli kiedyś włączysz
                             photoFile1Path?.let { path ->
                                 val f = File(path)
                                 put("photo1", fileToBase64Original(f))
@@ -788,6 +723,8 @@ fun ZgloszeniaScreen(
                 }
             }
 
+            Spacer(Modifier.height(24.dp))
+
             if (showBanner && message == "OK") {
                 SuccessBanner(
                     "Zgłoszenie zostało wysłane ✅",
@@ -798,6 +735,62 @@ fun ZgloszeniaScreen(
             }
         }
     }
+}
+
+
+@Composable
+fun DebossLogo(
+    modifier: Modifier = Modifier,
+    sizeDp: Dp = 300.dp
+) {
+    Box(
+        modifier = modifier.size(sizeDp),
+        contentAlignment = Alignment.Center
+    ) {
+        // 1) cień (w dół/prawo)
+        Image(
+            painter = painterResource(R.drawable.logo),
+            contentDescription = null,
+            modifier = Modifier
+                .matchParentSize()
+                .offset(x = 1.dp, y = 1.dp),
+            colorFilter = ColorFilter.tint(Color.Black),
+            alpha = 0.05f
+        )
+
+        // 2) światło (w górę/lewo)
+        Image(
+            painter = painterResource(R.drawable.logo),
+            contentDescription = null,
+            modifier = Modifier
+                .matchParentSize()
+                .offset(x = (-1).dp, y = (-1).dp),
+            colorFilter = ColorFilter.tint(Color.White),
+            alpha = 0.06f
+        )
+
+        // 3) baza (prawie niewidoczna)
+        Image(
+            painter = painterResource(R.drawable.logo),
+            contentDescription = null,
+            modifier = Modifier.matchParentSize(),
+            colorFilter = ColorFilter.tint(Color(0xFF9E9E9E)),
+            alpha = 0.03f
+        )
+    }
+}
+
+
+@Composable
+fun ZntLogoBackground(
+    modifier: Modifier = Modifier
+) {
+    DebossLogo(
+        modifier = modifier
+            .fillMaxWidth(0.7f)
+            .aspectRatio(1f)
+            .zIndex(0f)
+    )
 }
 
 
@@ -1569,14 +1562,10 @@ fun WodomierzeScreen(
     var showPhotoPreview by remember { mutableStateOf(false) }
 
 
-
-
     var isSending by rememberSaveable { mutableStateOf(false) }
     var sendError by rememberSaveable { mutableStateOf<String?>(null) }
 
     val vm = remember { SendVm() }
-
-
 
 
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -1586,7 +1575,6 @@ fun WodomierzeScreen(
             onPhotoBitmapChange(decodeSampledBitmapFromFileRotated(photoPath, maxSide = 2048))
         }
     }
-
 
 
     // Aparat: prosimy o uprawnienie i dopiero wtedy odpalamy TakePicture
@@ -1603,7 +1591,6 @@ fun WodomierzeScreen(
             Toast.makeText(context, "Brak zgody na aparat", Toast.LENGTH_SHORT).show()
         }
     }
-
 
 
     // Robi plik w cache + odpala aparat (bez zapisu do galerii)
@@ -1631,7 +1618,6 @@ fun WodomierzeScreen(
     }
 
 
-
     val canSave =
         userName.isNotBlank() &&
                 adres.trim().length >= 3 &&
@@ -1646,6 +1632,13 @@ fun WodomierzeScreen(
             .padding(padding)
             .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
     ) {
+
+        ZntLogoBackground(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 0.dp)
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1655,7 +1648,6 @@ fun WodomierzeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
             ScreenTitleWithUnderline(title = "WODOMIERZE")
             Spacer(Modifier.height(16.dp))
 
@@ -1664,6 +1656,10 @@ fun WodomierzeScreen(
                 onValueChange = onAdresChange,
                 modifier = Modifier.fillMaxWidth(0.8f)
             )
+
+            // ... i cała reszta Twojego UI dalej (bez zmian)
+
+
 
             UnderlineInput(
                 value = numerWodomierza,
@@ -1683,8 +1679,6 @@ fun WodomierzeScreen(
                 singleLine = true,
                 keyboardType = KeyboardType.Number
             )
-
-
 
 
             // ====== ZDJĘCIE (1 SLOT) ======
@@ -1788,11 +1782,8 @@ fun WodomierzeScreen(
             }
 
             sendError?.let {
-                Text(it, color = MaterialTheme.colorScheme.error) }
-
-
-
-
+                Text(it, color = MaterialTheme.colorScheme.error)
+            }
 
 
         }
