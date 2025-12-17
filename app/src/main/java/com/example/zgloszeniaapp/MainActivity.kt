@@ -550,18 +550,50 @@ fun ZgloszeniaScreen(
             // --- OPIS / TYP GABARYTÓW ---
             if (typ == Config.SHEET_GABARYTY) {
 
-                Text(
-                    text = "Typ gabarytów",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Light,
-                        fontSize = 22.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 40.dp, bottom = 4.dp),
-                    textAlign = TextAlign.Center
-                )
+                        .padding(top = 40.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    var textWidthDp by remember { mutableStateOf(0.dp) }
+                    val density = LocalDensity.current
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 0.dp, bottom = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Typ gabarytów:",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Light,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            onTextLayout = { result ->
+                                textWidthDp = with(density) { result.size.width.toDp() }
+                            }
+                        )
+
+                        Spacer(Modifier.height(4.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .width(textWidthDp)
+                                .height(2.dp) // ⬅️ grubość kreski
+                                .background(
+                                    MaterialTheme.colorScheme.outline, // ⬅️ kolor jak NIEAKTYWNY adres
+                                    RoundedCornerShape(2.dp)
+                                )
+                        )
+                    }
+
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+
+                }
+
 
                 Row(
                     modifier = Modifier
@@ -1687,10 +1719,14 @@ fun WodomierzeScreen(
             if (photoBitmap == null) {
                 Button(
                     onClick = { takePhoto() },
-                    modifier = Modifier.fillMaxWidth(0.8f)
+                    modifier = Modifier.wrapContentWidth()
                 ) {
-                    Text("Zrób zdjęcie wodomierza")
+                    Text(
+                        "Zrób zdjęcie wodomierza",
+                        textAlign = TextAlign.Center
+                    )
                 }
+
             } else {
                 Image(
                     bitmap = photoBitmap!!.asImageBitmap(),

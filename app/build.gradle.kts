@@ -71,6 +71,9 @@ dependencies {
         implementation("com.squareup.okhttp3:okhttp:4.12.0")
         implementation("com.squareup.okio:okio:3.5.0")
         implementation("com.google.code.gson:gson:2.11.0")
+        implementation("org.apache.poi:poi:5.2.3")
+        implementation("org.apache.poi:poi-ooxml:5.2.3")
+
     }
 
 }
