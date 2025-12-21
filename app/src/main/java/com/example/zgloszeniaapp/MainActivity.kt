@@ -120,6 +120,16 @@ import com.example.zgloszeniaapp.ui.theme.ZgloszeniaAPPTheme
 import org.json.JSONObject
 
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.runtime.LaunchedEffect
+import com.example.zgloszeniaapp.GrafikScreen
+
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+
+
 
 
 
@@ -131,11 +141,21 @@ private const val PHOTOS_ENABLED = false //import wylacza zdjecia
 
 
 class MainActivity : ComponentActivity() {
+
+    private var grafikReadyForSplash: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
+
+        // 1️⃣ Splash startuje NAJWCZEŚNIEJ
+        val splashScreen = installSplashScreen()
+        splashScreen.setKeepOnScreenCondition {
+            !grafikReadyForSplash
+        }
+
         super.onCreate(savedInstanceState)
 
-        // Czyść dane drafta przy każdym uruchomieniu aplikacji:
-        applicationContext.clearDraft()   // <<< DODAJ TO!
+        // Czyść dane drafta przy każdym uruchomieniu aplikacji
+        applicationContext.clearDraft()
 
         // Czyść pliki zdjęć
         clearPhotoCacheFiles()
@@ -148,25 +168,39 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // 2️⃣ Pobieranie grafiku w tle (splash nadal widoczny)
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                GrafikDownload.ensureLocalFile(
+                    applicationContext,
+                    GrafikConfig.GRAFIK_URL
+                )
+            } catch (e: Exception) {
+                // na razie ignorujemy
+            } finally {
+                withContext(Dispatchers.Main) {
+                    grafikReadyForSplash = true
+                }
+            }
+        }
+
+        // 3️⃣ UI – pokaże się dopiero po zwolnieniu splash
         setContent {
-            ZgloszeniaAPPTheme(
-                darkTheme = false
-            ) {
+            ZgloszeniaAPPTheme(darkTheme = false) {
                 AppScreen()
             }
         }
     }
 
-
-    // Funkcja czyści wszystkie pliki zaczynające się od "photo" z folderu cache
+    // ✅ TA FUNKCJA MA BYĆ TYLKO TU
     private fun clearPhotoCacheFiles() {
         val cacheDir = cacheDir
         cacheDir?.listFiles()?.forEach { file ->
             if (file.name.startsWith("photo")) file.delete()
         }
     }
-
 }
+
 
 enum class GabarytCategory(val label: String) {
     ROZNE("różne"),
@@ -176,7 +210,8 @@ enum class GabarytCategory(val label: String) {
 
 enum class Screen {
     ZGLOSZENIA,
-    WODOMIERZE
+    WODOMIERZE,
+    GRAFIK
 }
 
 
@@ -190,6 +225,29 @@ fun AppScreen() {
     val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        GrafikCache.preload(context.applicationContext)
+    }
+
+    var pendingScreen by remember { mutableStateOf<Screen?>(null) }
+
+    // ================== GRAFIK – sprawdzanie przy starcie aplikacji ==================
+
+    var grafikReady by rememberSaveable { mutableStateOf(false) }
+    var grafikError by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        try {
+            GrafikDownload.ensureLocalFile(context, GrafikConfig.GRAFIK_URL)
+            grafikReady = true
+        } catch (e: Exception) {
+            grafikError = "Nie udało się pobrać grafiku"
+        }
+    }
+
+// ================================================================================
+
+
     val draft = remember { context.loadDraft() }
 
     var userName by rememberSaveable { mutableStateOf(UserPrefs.getName(context) ?: "") }
@@ -215,7 +273,6 @@ fun AppScreen() {
     var wodStan by rememberSaveable { mutableStateOf("") }
     var wodPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
     var wodPhotoBitmap by remember { mutableStateOf<Bitmap?>(null) }
-
 
 
     // kategorie gabarytów
@@ -267,6 +324,14 @@ fun AppScreen() {
         wodPhotoBitmap = null
     }
 
+    LaunchedEffect(menuExpanded) {
+        if (!menuExpanded && pendingScreen != null) {
+            screen = pendingScreen!!
+            pendingScreen = null
+        }
+    }
+
+
     // auto-czyszczenie formularza po OK
     LaunchedEffect(showBanner, message) {
         if (showBanner && message == "OK") {
@@ -310,130 +375,150 @@ fun AppScreen() {
         )
     }
 
-    Scaffold { padding ->
-
-        Box(
-            modifier = Modifier.fillMaxSize()
-        ) {
-
-            // ====== TREŚĆ EKRANU ======
-            when (screen) {
-
-                Screen.ZGLOSZENIA -> {
-                    ZgloszeniaScreen(
-                        padding = padding,
-                        focusManager = focusManager,
-                        density = density,
-
-                        typ = typ,
-                        onTypChange = { typ = it },
-
-                        typPicked = typPicked,
-                        onTypPickedChange = { typPicked = it },
-
-                        adres = adres,
-                        onAdresChange = { adres = it },
-
-                        opis = opis,
-                        onOpisChange = { opis = it },
-
-                        catRozne = catRozne,
-                        onCatRozne = { catRozne = it },
-
-                        catBio = catBio,
-                        onCatBio = { catBio = it },
-
-                        catOpony = catOpony,
-                        onCatOpony = { catOpony = it },
-
-                        isSending = isSending,
-                        onIsSending = { isSending = it },
-
-                        message = message,
-                        onMessage = { message = it },
-
-                        showBanner = showBanner,
-                        onShowBanner = { showBanner = it },
-
-                        userName = userName,
-                        userId = userId,
-
-                        photoFile1Path = photoFile1Path,
-                        photoFile2Path = photoFile2Path,
-                        photoFile3Path = photoFile3Path
-                    )
-                }
-
-                Screen.WODOMIERZE -> {
-                    WodomierzeScreen(
-                        padding = padding,
-                        userName = userName,
-                        userId = userId,
-
-                        adres = wodAdres,
-                        onAdresChange = { wodAdres = it },
-
-                        numerWodomierza = wodNumer,
-                        onNumerWodomierzaChange = { wodNumer = it },
-
-                        stan = wodStan,
-                        onStanChange = { wodStan = it },
-
-                        photoPath = wodPhotoPath,
-                        onPhotoPathChange = { wodPhotoPath = it },
-
-                        photoBitmap = wodPhotoBitmap,
-                        onPhotoBitmapChange = { wodPhotoBitmap = it },
 
 
-                        onAfterSendClear = {
-                            wodAdres = ""
-                            wodNumer = ""
-                            wodStan = ""
-                            wodPhotoPath?.let { runCatching { File(it).delete() } }
-                            wodPhotoPath = null
-                            wodPhotoBitmap = null
-                        }
+        Scaffold { padding ->
 
-                    )
-                }
-            }
-
-
-            // ====== MENU (3 KROPKI) W PRAWYM GÓRNYM ROGU ======
             Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 8.dp, end = 8.dp)
-                    .zIndex(10f)
+                modifier = Modifier.fillMaxSize()
             ) {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Menu"
-                    )
+
+                // ====== TREŚĆ EKRANU ======
+                when (screen) {
+
+                    Screen.ZGLOSZENIA -> {
+                        ZgloszeniaScreen(
+                            padding = padding,
+                            focusManager = focusManager,
+                            density = density,
+
+                            typ = typ,
+                            onTypChange = { typ = it },
+
+                            typPicked = typPicked,
+                            onTypPickedChange = { typPicked = it },
+
+                            adres = adres,
+                            onAdresChange = { adres = it },
+
+                            opis = opis,
+                            onOpisChange = { opis = it },
+
+                            catRozne = catRozne,
+                            onCatRozne = { catRozne = it },
+
+                            catBio = catBio,
+                            onCatBio = { catBio = it },
+
+                            catOpony = catOpony,
+                            onCatOpony = { catOpony = it },
+
+                            isSending = isSending,
+                            onIsSending = { isSending = it },
+
+                            message = message,
+                            onMessage = { message = it },
+
+                            showBanner = showBanner,
+                            onShowBanner = { showBanner = it },
+
+                            userName = userName,
+                            userId = userId,
+
+                            photoFile1Path = photoFile1Path,
+                            photoFile2Path = photoFile2Path,
+                            photoFile3Path = photoFile3Path
+                        )
+                    }
+
+                    Screen.WODOMIERZE -> {
+                        WodomierzeScreen(
+                            padding = padding,
+                            userName = userName,
+                            userId = userId,
+
+                            adres = wodAdres,
+                            onAdresChange = { wodAdres = it },
+
+                            numerWodomierza = wodNumer,
+                            onNumerWodomierzaChange = { wodNumer = it },
+
+                            stan = wodStan,
+                            onStanChange = { wodStan = it },
+
+                            photoPath = wodPhotoPath,
+                            onPhotoPathChange = { wodPhotoPath = it },
+
+                            photoBitmap = wodPhotoBitmap,
+                            onPhotoBitmapChange = { wodPhotoBitmap = it },
+
+                            onAfterSendClear = {
+                                wodAdres = ""
+                                wodNumer = ""
+                                wodStan = ""
+                                wodPhotoPath?.let { runCatching { File(it).delete() } }
+                                wodPhotoPath = null
+                                wodPhotoBitmap = null
+                            }
+                        )
+                    }
+
+                    Screen.GRAFIK -> GrafikScreen(padding = padding)
                 }
 
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false }
+                // ====== MENU (3 KROPKI) ======
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 8.dp, end = 8.dp)
+                        .zIndex(10f)
                 ) {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.padding(top = 30.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Menu"
+                        )
+                    }
 
-                    DropdownMenuItem(
-                        text = { Text("Wodomierze") },
-                        onClick = {
-                            screen = Screen.WODOMIERZE
-                            menuExpanded = false
-                        }
-                    )
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+
+                        DropdownMenuItem(
+                            text = { Text("Wodomierze") },
+                            onClick = {
+                                menuExpanded = false
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    screen = Screen.WODOMIERZE
+                                }
+                            }
+                        )
+
+
+
+                        DropdownMenuItem(
+                            text = { Text("Grafik") },
+                            onClick = {
+                                menuExpanded = false
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    screen = Screen.GRAFIK
+                                }
+                            }
+                        )
+
+
+
+                    }
                 }
             }
         }
     }
-}
 
-
-@Composable
+    @Composable
 fun ZgloszeniaScreen(
     padding: PaddingValues,
     focusManager: androidx.compose.ui.focus.FocusManager,
@@ -1160,6 +1245,8 @@ fun PhotoSlot(
             }
         }
     }
+
+
 }
 
 
