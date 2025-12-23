@@ -261,6 +261,11 @@ fun AppScreen() {
         screen = Screen.ZGLOSZENIA
     }
 
+    BackHandler(enabled = screen == Screen.GRAFIK) {
+        screen = Screen.ZGLOSZENIA
+    }
+
+
     var menuExpanded by remember { mutableStateOf(false) }
 
 
@@ -380,7 +385,14 @@ fun AppScreen() {
         Scaffold { padding ->
 
             Box(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        focusManager.clearFocus()
+                    }
             ) {
 
                 // ====== TREŚĆ EKRANU ======
