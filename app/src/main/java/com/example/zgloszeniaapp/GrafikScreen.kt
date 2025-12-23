@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
@@ -38,14 +39,19 @@ import androidx.compose.ui.unit.sp
 fun GrafikScreen(padding: PaddingValues) {
 
     val context = LocalContext.current
+    var selectedName by rememberSaveable { mutableStateOf<String?>(null) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
 
-    var searchQuery by remember { mutableStateOf("") }
     var allRows by remember { mutableStateOf<List<GrafikRow>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    var selectedName by remember { mutableStateOf<String?>(null) }
+
     val ready by GrafikCache.ready.collectAsState()
+
+    var selectedDozorca by rememberSaveable { mutableStateOf<String?>(null) }
+    var addressQuery by rememberSaveable { mutableStateOf("") }
+
 
 
     LaunchedEffect(Unit) {
@@ -105,7 +111,7 @@ fun GrafikScreen(padding: PaddingValues) {
             ScreenTitleWithUnderline(title = "GRAFIK")
             Spacer(Modifier.height(12.dp))
 
-            // ===== WYBÓR DOZORCY =====
+// ===== WYBÓR DOZORCY =====
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
@@ -113,19 +119,26 @@ fun GrafikScreen(padding: PaddingValues) {
                 DozorcaPillPicker(
                     names = names,
                     selectedName = selectedName,
-                    onSelect = { selectedName = it },
-
+                    onSelect = { name ->
+                        selectedName = name
+                        searchQuery = "" // ✅ kasuje adres
+                    }
                 )
             }
 
             Spacer(Modifier.height(12.dp))
 
-            // ===== WYSZUKIWARKA ULIC =====
+// ===== WYSZUKIWARKA ULIC =====
+
             AddressField(
                 value = searchQuery,
-                onValueChange = { searchQuery = it },
+                onValueChange = {
+                    searchQuery = it
+                    if (it.isNotBlank()) selectedName = null   // ✅ kasuje dozorczynię
+                },
                 modifier = Modifier.fillMaxWidth(0.8f)
             )
+
 
             Spacer(Modifier.height(12.dp))
 
