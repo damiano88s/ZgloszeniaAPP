@@ -121,12 +121,15 @@ import org.json.JSONObject
 
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import com.example.zgloszeniaapp.GrafikScreen
 
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+
 
 
 
@@ -146,13 +149,25 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
 
-        // 1️⃣ Splash startuje NAJWCZEŚNIEJ
+        // systemowy splash + trzymanie do czasu pobrania grafiku
         val splashScreen = installSplashScreen()
-        splashScreen.setKeepOnScreenCondition {
-            !grafikReadyForSplash
+        splashScreen.setKeepOnScreenCondition { !grafikReadyForSplash }
+
+        // (opcjonalnie) miękkie zejście, żeby nie było “pstryk”
+        splashScreen.setOnExitAnimationListener { view ->
+            android.animation.ObjectAnimator.ofFloat(view.view, "alpha", 1f, 0f).apply {
+                duration = 150
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                        view.remove()
+                    }
+                })
+                start()
+            }
         }
 
         super.onCreate(savedInstanceState)
+
 
         // Czyść dane drafta przy każdym uruchomieniu aplikacji
         applicationContext.clearDraft()
@@ -184,12 +199,15 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 3️⃣ UI – pokaże się dopiero po zwolnieniu splash
         setContent {
             ZgloszeniaAPPTheme(darkTheme = false) {
                 AppScreen()
             }
         }
+
+
+
+
     }
 
     // ✅ TA FUNKCJA MA BYĆ TYLKO TU
@@ -198,6 +216,74 @@ class MainActivity : ComponentActivity() {
         cacheDir?.listFiles()?.forEach { file ->
             if (file.name.startsWith("photo")) file.delete()
         }
+    }
+}
+@Composable
+private fun FullImageSplash(
+    durationMs: Int,
+    imageRes: Int
+) {
+    var visible by remember { mutableStateOf(true) }
+    val alpha = remember { androidx.compose.animation.core.Animatable(1f) }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(durationMs.toLong())
+        alpha.animateTo(
+            targetValue = 0f,
+            animationSpec = androidx.compose.animation.core.tween(150)
+        )
+        visible = false
+    }
+
+    if (!visible) return
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(androidx.compose.ui.graphics.Color(0xFFE6E6E6)),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(id = imageRes),
+            contentDescription = null,
+            modifier = Modifier.graphicsLayer(alpha = alpha.value)
+        )
+    }
+}
+
+@Composable
+private fun SplashOverlay(onFinished: () -> Unit) {
+    val logoPainter = painterResource(id = R.drawable.logo)
+
+    val scale = remember { androidx.compose.animation.core.Animatable(1.0f) }
+
+    LaunchedEffect(Unit) {
+        scale.snapTo(1.0f) // start = jak na systemowym splashu
+        scale.animateTo(
+            targetValue = 1.25f,  // możesz dać 1.20f–1.35f według gustu
+            animationSpec = androidx.compose.animation.core.tween(
+                durationMillis = 3000,
+                easing = androidx.compose.animation.core.FastOutSlowInEasing
+            )
+        )
+        onFinished()
+    }
+
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(androidx.compose.ui.graphics.Color(0xFFE6E6E6)),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = logoPainter,
+            contentDescription = null,
+            modifier = Modifier.graphicsLayer(
+                scaleX = scale.value,
+                scaleY = scale.value
+            )
+        )
     }
 }
 
@@ -233,8 +319,37 @@ fun AppScreen() {
 
     // ================== GRAFIK – sprawdzanie przy starcie aplikacji ==================
 
+    var grafikAllRows by remember { mutableStateOf<List<GrafikRow>>(emptyList()) }
+    var grafikLoading by remember { mutableStateOf(false) }
+    var grafikError by remember { mutableStateOf<String?>(null) }
+    var grafikLoadedOnce by remember { mutableStateOf(false) }
     var grafikReady by rememberSaveable { mutableStateOf(false) }
-    var grafikError by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // ====== DANE GRAFIKU W PAMIĘCI ======
+
+
+    LaunchedEffect(Unit) {
+        if (grafikLoadedOnce) return@LaunchedEffect
+
+        grafikLoading = true
+        grafikError = null
+
+        try {
+            val file = GrafikDownload.localFile(context)
+            val rows = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                file.inputStream().use { GrafikExcelReader.read(it) }
+            }
+            grafikAllRows = rows
+        } catch (e: Exception) {
+            grafikError = "Nie udało się wczytać grafiku"
+        } finally {
+            grafikLoading = false
+            grafikLoadedOnce = true
+        }
+    }
+
+
+
 
     LaunchedEffect(Unit) {
         try {
@@ -246,6 +361,7 @@ fun AppScreen() {
     }
 
 // ================================================================================
+
 
 
     val draft = remember { context.loadDraft() }
@@ -284,6 +400,12 @@ fun AppScreen() {
     var catRozne by rememberSaveable { mutableStateOf(false) }
     var catBio by rememberSaveable { mutableStateOf(false) }
     var catOpony by rememberSaveable { mutableStateOf(false) }
+
+    // STAN GRAFIKU – ma żyć dopóki apka działa
+    var grafikSelectedName by remember { mutableStateOf<String?>(null) }
+    var grafikSearchQuery by remember { mutableStateOf("") }
+    var grafikSelectedDozorca by remember { mutableStateOf<String?>(null) } // jeśli masz
+
 
     // zdjęcia
     var photoFile1Path by rememberSaveable { mutableStateOf<String?>(null) }
@@ -475,7 +597,26 @@ fun AppScreen() {
                         )
                     }
 
-                    Screen.GRAFIK -> GrafikScreen(padding = padding)
+                    Screen.GRAFIK -> {
+                        GrafikScreen(
+                            padding = padding,
+
+                            selectedName = grafikSelectedName,
+                            onSelectedNameChange = { grafikSelectedName = it },
+
+                            searchQuery = grafikSearchQuery,
+                            onSearchQueryChange = { grafikSearchQuery = it },
+
+                            selectedDozorca = grafikSelectedDozorca,
+                            onSelectedDozorcaChange = { grafikSelectedDozorca = it },
+
+                            allRows = grafikAllRows,
+                            loading = grafikLoading,
+                            error = grafikError
+                        )
+                    }
+
+
                 }
 
                 // ====== MENU (3 KROPKI) ======

@@ -2,6 +2,7 @@ package com.example.zgloszeniaapp
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -22,9 +23,11 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -32,42 +35,38 @@ import androidx.compose.ui.unit.DpOffset
 
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.sp
-
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 
 @Composable
-fun GrafikScreen(padding: PaddingValues) {
+fun GrafikScreen(
+    padding: PaddingValues,
+    selectedName: String?,
+    onSelectedNameChange: (String?) -> Unit,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    selectedDozorca: String?,
+    onSelectedDozorcaChange: (String?) -> Unit,
+    allRows: List<GrafikRow>,
+    loading: Boolean,
+    error: String?
+) {
+
+
+
+
 
     val context = LocalContext.current
-    var selectedName by rememberSaveable { mutableStateOf<String?>(null) }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-
-    var allRows by remember { mutableStateOf<List<GrafikRow>>(emptyList()) }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-
-    val ready by GrafikCache.ready.collectAsState()
-
-    var selectedDozorca by rememberSaveable { mutableStateOf<String?>(null) }
-    var addressQuery by rememberSaveable { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
 
 
 
-    LaunchedEffect(Unit) {
-        error = null
-        try {
-            val file = GrafikDownload.localFile(context)
 
-            val rows = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                file.inputStream().use { GrafikExcelReader.read(it) }
-            }
 
-            allRows = rows
-        } catch (e: Exception) {
-            error = "Nie udało się wczytać lokalnego grafiku"
-        }
-    }
+
+
+
 
 
 
@@ -91,27 +90,33 @@ fun GrafikScreen(padding: PaddingValues) {
         else allRows.filter { normalize(it.ulica).contains(q) }
     }
 
+    // ✅ taki sam kontener jak w WODOMIERZACH
     Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
+            .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
     ) {
-
-        // TŁO
-        ZntLogoBackground(modifier = Modifier.fillMaxSize())
+        // ✅ tło identycznie jak w WODOMIERZACH (na dole)
+        ZntLogoBackground(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 0.dp)
+        )
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
                 .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
             ScreenTitleWithUnderline(title = "GRAFIK")
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(16.dp))
 
-// ===== WYBÓR DOZORCY =====
+            // ===== WYBÓR DOZORCY =====
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
@@ -120,39 +125,37 @@ fun GrafikScreen(padding: PaddingValues) {
                     names = names,
                     selectedName = selectedName,
                     onSelect = { name ->
-                        selectedName = name
-                        searchQuery = "" // ✅ kasuje adres
+                        onSelectedNameChange(name)
+                        onSearchQueryChange("") // kasuje adres
                     }
+
                 )
             }
 
-            Spacer(Modifier.height(12.dp))
-
-// ===== WYSZUKIWARKA ULIC =====
-
+            // ===== WYSZUKIWARKA ULIC =====
             AddressField(
                 value = searchQuery,
-                onValueChange = {
-                    searchQuery = it
-                    if (it.isNotBlank()) selectedName = null   // ✅ kasuje dozorczynię
+                onValueChange = { txt ->
+                    onSearchQueryChange(txt)
+                    if (txt.isNotBlank()) onSelectedNameChange(null)  // kasuje dozorczynię
                 },
                 modifier = Modifier.fillMaxWidth(0.8f)
             )
 
-
-            Spacer(Modifier.height(12.dp))
-
             // ===== CZĘŚĆ PRZEWIJANA =====
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .weight(1f)
             ) {
                 when {
-                    loading -> CircularProgressIndicator()
+                    loading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
 
-                    error != null -> Text(text = error!!, color = Color.Red)
+                    error != null -> Text(
+                        text = error!!,
+                        color = Color.Red,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
 
                     else -> {
                         val scroll = rememberScrollState()
@@ -172,7 +175,14 @@ fun GrafikScreen(padding: PaddingValues) {
                                         Card(
                                             modifier = Modifier
                                                 .fillMaxWidth(0.95f)
-                                                .padding(vertical = 4.dp)
+                                                .padding(vertical = 6.dp),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = MaterialTheme.colorScheme.surface
+                                            ),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                                            )
                                         ) {
                                             Column(modifier = Modifier.padding(12.dp)) {
                                                 Text(text = day, fontSize = 16.sp)
@@ -184,7 +194,6 @@ fun GrafikScreen(padding: PaddingValues) {
                                         }
                                     }
                                 }
-                                Spacer(Modifier.height(12.dp))
                             }
 
                             // --- wyniki wyszukiwania ulic
@@ -196,7 +205,14 @@ fun GrafikScreen(padding: PaddingValues) {
                                         Card(
                                             modifier = Modifier
                                                 .fillMaxWidth(0.95f)
-                                                .padding(vertical = 4.dp)
+                                                .padding(vertical = 6.dp),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = MaterialTheme.colorScheme.surface
+                                            ),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                                            )
                                         ) {
                                             Column(modifier = Modifier.padding(12.dp)) {
                                                 Text(
@@ -219,6 +235,7 @@ fun GrafikScreen(padding: PaddingValues) {
         }
     }
 }
+
 
 // Normalizacja: bez polskich znaków i bez znaczenia wielkości liter
 fun normalize(text: String): String {

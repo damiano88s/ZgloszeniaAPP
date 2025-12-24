@@ -27,14 +27,13 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
-            android:theme="@style/Theme.ZgloszeniaAPP"
-            android:screenOrientation="portrait">
+            android:theme="@style/Theme.App.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
 
         <!-- AKTYWNOŚĆ PODGLĄDU ZDJĘCIA – może się obracać -->
         <activity

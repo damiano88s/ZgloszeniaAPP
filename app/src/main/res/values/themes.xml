@@ -1,5 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.ZgloszeniaAPP" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- GŁÓWNY THEME APLIKACJI (zostaje bez zmian) -->
+    <style name="Theme.ZgloszeniaAPP"
+        parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- THEME SPLASH (nowy) -->
+    <style name="Theme.App.Splash"
+        parent="Theme.SplashScreen">
+
+        <!-- Popielate tło zamiast białego -->
+        <item name="windowSplashScreenBackground">#E6E6E6</item>
+        <item name="android:windowBackground">#E6E6E6</item>
+
+        <!-- Twoje logo -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/logo</item>
+        <item name="windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
+
+
+
+
+        <!-- Po splashu przejście do normalnego theme -->
+        <item name="postSplashScreenTheme">@style/Theme.ZgloszeniaAPP</item>
+    </style>
+
 </resources>
