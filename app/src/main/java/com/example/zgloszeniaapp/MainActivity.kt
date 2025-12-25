@@ -82,6 +82,7 @@ import androidx.compose.material3.Text
 
 // Material icons
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -129,6 +130,9 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+
+import kotlinx.coroutines.delay
+
 
 
 
@@ -490,6 +494,10 @@ fun AppScreen() {
             kotlinx.coroutines.delay(3000)
             message = null
             showBanner = false
+            delay(3000)
+            showBanner = false
+
+
         }
     }
 
@@ -912,6 +920,7 @@ fun ZgloszeniaScreen(
                         else -> false
                     },
                     onClick = {
+                        focusManager.clearFocus()
                         if (typ == null) {
                             onMessage("Zaznacz typ zgłoszenia")
                             return@Button
@@ -995,14 +1004,20 @@ fun ZgloszeniaScreen(
 
             Spacer(Modifier.height(24.dp))
 
+            Spacer(Modifier.height(24.dp))
+
             if (showBanner && message == "OK") {
                 SuccessBanner(
-                    "Zgłoszenie zostało wysłane ✅",
+                    "Zgłoszenie zostało wysłane",
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
+                        .fillMaxWidth(0.9f)
+                        .padding(top = 12.dp)
+                        .align(Alignment.CenterHorizontally)
                 )
             }
+
+
+
         }
     }
 }
@@ -1069,29 +1084,30 @@ fun ZntLogoBackground(
 
 
 
-    @Composable
-fun SuccessBanner(text: String, modifier: Modifier = Modifier) {
-    Row(
+@Composable
+fun SuccessBanner(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
         modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFE8F5E9))      // jasna zieleń tła
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .background(
+                color = Color(0xFF2E7D32), // spokojna zieleń
+                shape = RoundedCornerShape(14.dp)
+            )
+            .padding(vertical = 14.dp, horizontal = 12.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = Icons.Rounded.CheckCircle,
-            contentDescription = null,
-            tint = Color(0xFF2E7D32)            // ciemna zieleń ikonki
-        )
-        Spacer(Modifier.width(8.dp))
         Text(
             text = text,
-            color = Color(0xFF2E7D32),
-            style = MaterialTheme.typography.bodyMedium
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center
         )
     }
 }
+
+
 
 @Composable
 fun TypeTab(
@@ -1836,6 +1852,9 @@ fun WodomierzeScreen(
 
     var isSending by rememberSaveable { mutableStateOf(false) }
     var sendError by rememberSaveable { mutableStateOf<String?>(null) }
+    var message by rememberSaveable { mutableStateOf<String?>(null) }
+    var showBanner by rememberSaveable { mutableStateOf(false) }
+
 
     val vm = remember { SendVm() }
 
@@ -1897,13 +1916,23 @@ fun WodomierzeScreen(
                 stan.trim().isNotBlank() &&
                 photoBitmap != null
 
+    LaunchedEffect(showBanner, message) {
+        if (showBanner && message == "OK") {
+            delay(5000)
+            showBanner = false
+        }
+    }
+
+
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
             .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
-    ) {
+    )
+
+    {
 
         ZntLogoBackground(
             modifier = Modifier
@@ -2013,6 +2042,7 @@ fun WodomierzeScreen(
             Button(
                 enabled = canSave && !isSending,
                 onClick = {
+                    focusManager.clearFocus()   // ⬅️ TO DODAJESZ
                     sendError = null
                     isSending = true
 
@@ -2042,14 +2072,20 @@ fun WodomierzeScreen(
                     ) { ok, msg ->
                         isSending = false
 
+
                         // msg to odpowiedź z Apps Script
                         sendError = "RESP: $msg"
 
                         if (ok && msg.contains("\"status\":\"OK\"")) {
                             onAfterSendClear()
-                            Toast.makeText(context, "Zapisano ✅", Toast.LENGTH_SHORT).show()
+                            message = "OK"
+                            showBanner = true
                             sendError = null
+                        } else {
+                            message = "ERR"
+                            showBanner = false
                         }
+
                     }
 
                 }
@@ -2062,7 +2098,22 @@ fun WodomierzeScreen(
             }
 
 
+
+
+
         }
+        if (showBanner && message == "OK") {
+            SuccessBanner(
+                "Wodomierz został wysłany",
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .align(Alignment.BottomCenter)
+                    .imePadding()
+                    .padding(bottom = 24.dp)
+            )
+        }
+
+
     }
 }
 
