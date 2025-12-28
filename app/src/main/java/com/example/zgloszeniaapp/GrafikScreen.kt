@@ -38,6 +38,13 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.style.TextAlign
+
+
 
 @Composable
 fun GrafikScreen(
@@ -50,25 +57,14 @@ fun GrafikScreen(
     onSelectedDozorcaChange: (String?) -> Unit,
     allRows: List<GrafikRow>,
     loading: Boolean,
-    error: String?
+    error: String?,
+    firstInstallInfo: Boolean
 ) {
-
-
 
 
 
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-
-
-
-
-
-
-
-
-
-
 
     val names = remember(allRows) {
         allRows.map { it.imie }.distinct().sorted()
@@ -113,6 +109,22 @@ fun GrafikScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
+            // ⬇⬇⬇ DOKŁADNIE TUTAJ
+            if (firstInstallInfo && allRows.isEmpty()) {
+                Text(
+                    text = "Pierwsze uruchomienie po instalacji.\nZamknij i uruchom aplikację ponownie, aby załadować grafik.",
+                    color = Color.Gray,
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else if (error != null) {
+                Text(
+                    text = error,
+                    color = Color.Red,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+
+
             ScreenTitleWithUnderline(title = "GRAFIK")
             Spacer(Modifier.height(16.dp))
 
@@ -126,11 +138,11 @@ fun GrafikScreen(
                     selectedName = selectedName,
                     onSelect = { name ->
                         onSelectedNameChange(name)
-                        onSearchQueryChange("") // kasuje adres
+                        onSearchQueryChange("")
                     }
-
                 )
             }
+
 
             // ===== WYSZUKIWARKA ULIC =====
             AddressField(

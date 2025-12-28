@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.zgloszeniaapp"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2 //zwiekszamy o 1
+        versionName = "1.1" //zwiekszamy o 1
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

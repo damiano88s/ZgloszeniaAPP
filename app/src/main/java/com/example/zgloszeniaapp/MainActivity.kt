@@ -123,6 +123,7 @@ import org.json.JSONObject
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.core.content.ContextCompat
 import com.example.zgloszeniaapp.GrafikScreen
 
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -132,6 +133,9 @@ import kotlinx.coroutines.withContext
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 
 import kotlinx.coroutines.delay
+import android.Manifest
+
+
 
 
 
@@ -324,10 +328,12 @@ fun AppScreen() {
     // ================== GRAFIK – sprawdzanie przy starcie aplikacji ==================
 
     var grafikAllRows by remember { mutableStateOf<List<GrafikRow>>(emptyList()) }
-    var grafikLoading by remember { mutableStateOf(false) }
+    //var grafikLoading by remember { mutableStateOf(false) }
     var grafikError by remember { mutableStateOf<String?>(null) }
     var grafikLoadedOnce by remember { mutableStateOf(false) }
     var grafikReady by rememberSaveable { mutableStateOf(false) }
+    var firstInstallInfo by rememberSaveable { mutableStateOf(false) }
+
 
     // ====== DANE GRAFIKU W PAMIĘCI ======
 
@@ -335,7 +341,6 @@ fun AppScreen() {
     LaunchedEffect(Unit) {
         if (grafikLoadedOnce) return@LaunchedEffect
 
-        grafikLoading = true
         grafikError = null
 
         try {
@@ -345,24 +350,55 @@ fun AppScreen() {
             }
             grafikAllRows = rows
         } catch (e: Exception) {
-            grafikError = "Nie udało się wczytać grafiku"
+            if (grafikLoadedOnce) {
+                grafikError = "Nie udało się wczytać grafiku"
+            }
         } finally {
-            grafikLoading = false
             grafikLoadedOnce = true
         }
     }
 
 
 
-
     LaunchedEffect(Unit) {
+        if (grafikLoadedOnce) return@LaunchedEffect
+
+        grafikError = null
+        firstInstallInfo = false
+
+        val prefs = context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+        val everLoadedKey = "grafik_ever_loaded"
+        val grafikEverLoaded = prefs.getBoolean(everLoadedKey, false)
+
         try {
-            GrafikDownload.ensureLocalFile(context, GrafikConfig.GRAFIK_URL)
+            // 1) upewnij się, że plik jest lokalnie
+            val file = GrafikDownload.ensureLocalFile(context, GrafikConfig.GRAFIK_URL)
+
+            // 2) spróbuj odczytać excel do listy
+            val rows = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                file.inputStream().use { GrafikExcelReader.read(it) }
+            }
+            grafikAllRows = rows
             grafikReady = true
+
+            // 3) zapamiętaj, że grafik chociaż raz zadziałał
+            prefs.edit().putBoolean(everLoadedKey, true).apply()
+
         } catch (e: Exception) {
-            grafikError = "Nie udało się pobrać grafiku"
+            grafikReady = false
+
+            if (!grafikEverLoaded) {
+                // ✅ świeża instalacja / pierwszy start
+                firstInstallInfo = true
+            } else {
+                // ✅ jeśli kiedyś działało, to realny błąd
+                grafikError = "Nie udało się wczytać grafiku"
+            }
+        } finally {
+            grafikLoadedOnce = true
         }
     }
+
 
 // ================================================================================
 
@@ -619,8 +655,9 @@ fun AppScreen() {
                             onSelectedDozorcaChange = { grafikSelectedDozorca = it },
 
                             allRows = grafikAllRows,
-                            loading = grafikLoading,
-                            error = grafikError
+                            loading = false,
+                            error = grafikError,
+                            firstInstallInfo = firstInstallInfo
                         )
                     }
 
@@ -1987,7 +2024,19 @@ fun WodomierzeScreen(
 
             if (photoBitmap == null) {
                 Button(
-                    onClick = { takePhoto() },
+                    onClick = {
+                        val hasCameraPermission =
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.CAMERA
+                            ) == PackageManager.PERMISSION_GRANTED
+
+                        if (hasCameraPermission) {
+                            takePhoto()
+                        } else {
+                            cameraPermLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    },
                     modifier = Modifier.wrapContentWidth()
                 ) {
                     Text(
@@ -1996,7 +2045,9 @@ fun WodomierzeScreen(
                     )
                 }
 
-            } else {
+
+
+        } else {
                 Image(
                     bitmap = photoBitmap!!.asImageBitmap(),
                     contentDescription = null,
