@@ -14,4 +14,13 @@ i przeglądać zgłoszenia bez używania papierowych formularzy.
 - aplikacja tworzona pod realne potrzeby pracy
 
 ## Zrzuty ekranu
-*(zdjęcia zostaną dodane w kolejnym kroku)*
+
+### Główne okno – Zgłoszenia
+![Główne okno – Zgłoszenia](screenshots/zgloszenia.jpg)
+
+### Okno wodomierzy
+![Okno wodomierzy](screenshots/wodomierze.jpg)
+
+### Okno grafiku
+![Okno grafiku](screenshots/grafik.jpg)
+
