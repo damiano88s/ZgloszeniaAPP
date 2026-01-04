@@ -79,13 +79,11 @@ fun GrafikScreen(
         val name = selectedName ?: return@remember emptyMap()
         allRows.filter { it.imie == name }.groupBy { it.dzien }
     }
-
     val filteredResults = remember(searchQuery, allRows) {
         val q = normalize(searchQuery.trim())
         if (q.isBlank()) emptyList()
-        else allRows.filter { normalize(it.ulica).contains(q) }
+        else allRows.filter { normalize(it.ulica).startsWith(q) }
     }
-
     // ✅ taki sam kontener jak w WODOMIERZACH
     Box(
         modifier = Modifier

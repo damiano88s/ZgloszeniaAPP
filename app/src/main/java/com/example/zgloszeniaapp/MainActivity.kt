@@ -209,9 +209,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ZgloszeniaAPPTheme(darkTheme = false) {
-                AppScreen()
+                Column {
+                    Text(text = "VERSION: ${BuildConfig.VERSION_NAME}")
+                    AppScreen()
+                }
             }
         }
+
 
 
 
@@ -1004,7 +1008,7 @@ fun ZgloszeniaScreen(
                             put("opis", finalOpis)
                             put("uzytkownik", userName.trim())
                             put("urz_uuid", userId)
-                            put("wersja_apki", Config.APP_VERSION)
+                            put("wersja_apki", BuildConfig.VERSION_NAME)
                             put("timestamp_client", System.currentTimeMillis())
 
                             photoFile1Path?.let { path ->

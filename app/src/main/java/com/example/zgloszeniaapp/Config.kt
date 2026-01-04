@@ -7,7 +7,8 @@ object Config {
 
     // URL do Web App (koniecznie /exec)
     const val WEB_APP_URL =
-        "https://script.google.com/macros/s/AKfycbzkjBpeMYFHimFV2JNNuJxzvizrUxheneUaQwimgS-WRg2SObo_8ABHrb5kRuNJHKxh/exec"
+        "https://script.google.com/macros/s/AKfycbyeWKoKLjeTThnEhme_6BVUxBxvtZPXJdgMWccwFzWzShKfz3t-LJSLl2uNgT2lpqvy/exec"
+
 
     // Token – zostaw taki, jak miałeś; jeśli nie używasz, może być pusty.
     const val SECRET_TOKEN = ""  // <- wstaw swój, jeżeli sprawdzasz go w Apps Script
