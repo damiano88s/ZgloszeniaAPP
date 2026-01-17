@@ -9,11 +9,11 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.zgloszeniaapp"
+        applicationId = "com.zgred.zgloszeniaapp"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4 //zwiekszamy o 1
-        versionName = "1.4" //zwiekszamy o 0.1
+        versionCode = 5 //zwiekszamy o 1
+        versionName = "1.5" //zwiekszamy o 0.1
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

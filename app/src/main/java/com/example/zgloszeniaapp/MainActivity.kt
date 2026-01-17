@@ -63,7 +63,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -135,6 +135,8 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import kotlinx.coroutines.delay
 import android.Manifest
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 
 
 
@@ -209,17 +211,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ZgloszeniaAPPTheme(darkTheme = false) {
-                Column {
-                    Text(text = "VERSION: ${BuildConfig.VERSION_NAME}")
-                    AppScreen()
-                }
+                AppScreen()
             }
         }
-
-
-
-
-
     }
 
     // ✅ TA FUNKCJA MA BYĆ TYLKO TU
@@ -309,8 +303,10 @@ enum class GabarytCategory(val label: String) {
 enum class Screen {
     ZGLOSZENIA,
     WODOMIERZE,
-    GRAFIK
+    GRAFIK,
+    ODSNIEZANIE
 }
+
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -645,6 +641,10 @@ fun AppScreen() {
                         )
                     }
 
+                    Screen.ODSNIEZANIE -> {
+                        OdsniezanieScreen(padding = padding)
+                    }
+
                     Screen.GRAFIK -> {
                         GrafikScreen(
                             padding = padding,
@@ -699,6 +699,17 @@ fun AppScreen() {
                                 }
                             }
                         )
+                        DropdownMenuItem(
+                            text = { Text("Odśnieżanie") },
+                            onClick = {
+                                menuExpanded = false
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    screen = Screen.ODSNIEZANIE
+                                }
+                            }
+                        )
+
+                        
 
 
 
@@ -1751,6 +1762,96 @@ fun AddressField(
         )
     }
 }
+@Composable
+fun AddressFieldWithPlaceholder(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholderText: String,
+    modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    capitalization: KeyboardCapitalization = KeyboardCapitalization.Words
+) {
+    val lineColor = if (value.trim().isNotEmpty()) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+
+    Column(modifier = modifier) {
+
+        TextField(
+            value = value,
+            onValueChange = { rawText ->
+                // Jeśli to jest pole tekstowe (adres) → Twoje formatowanie Każde Słowo z Dużej
+                // Jeśli to jest pole liczbowe (czas) → nie ruszamy tekstu
+                val finalText = if (keyboardType == KeyboardType.Number) {
+                    rawText
+                } else {
+                    val hasTrailingSpace = rawText.endsWith(" ")
+                    val core = rawText.trimEnd()
+
+                    val normalizedCore = core
+                        .split(' ')
+                        .filter { it.isNotBlank() }
+                        .joinToString(" ") { word ->
+                            val lower = word.lowercase()
+                            lower.replaceFirstChar { ch ->
+                                if (ch.isLowerCase()) ch.titlecase() else ch.toString()
+                            }
+                        }
+
+                    if (hasTrailingSpace) {
+                        if (normalizedCore.isEmpty()) " " else normalizedCore + " "
+                    } else {
+                        normalizedCore
+                    }
+                }
+
+                onValueChange(finalText)
+            },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 0.dp),
+            placeholder = {
+                Text(
+                    text = placeholderText,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Light
+                )
+            },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Medium
+            ),
+            colors = TextFieldDefaults.colors(
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                cursorColor = MaterialTheme.colorScheme.primary
+            ),
+            keyboardOptions = KeyboardOptions(
+                capitalization = capitalization,
+                autoCorrect = (keyboardType != KeyboardType.Number),
+                keyboardType = keyboardType
+            )
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(lineColor)
+        )
+    }
+}
+
 
 @Composable
 fun CategoryOption(
@@ -2003,24 +2104,34 @@ fun WodomierzeScreen(
 
 
 
-            UnderlineInput(
+            AddressFieldWithPlaceholder(
                 value = numerWodomierza,
                 onValueChange = onNumerWodomierzaChange,
-                placeholder = "Numer wodomierza",
+                placeholderText = "Numer wodomierza",
                 modifier = Modifier.fillMaxWidth(0.8f),
-                singleLine = true
+                keyboardType = KeyboardType.Text,
+                capitalization = KeyboardCapitalization.None
             )
 
-            UnderlineInput(
+
+            AddressFieldWithPlaceholder(
                 value = stan,
                 onValueChange = { new ->
-                    onStanChange(new.filter { it.isDigit() || it == '.' || it == ',' })
+                    val filtered = new
+                        .replace('.', ',')
+                        .filter { it.isDigit() || it == ',' }
+
+                    // tylko jeden przecinek
+                    if (filtered.count { it == ',' } <= 1) {
+                        onStanChange(filtered)
+                    }
                 },
-                placeholder = "Stan",
+                placeholderText = "Stan",
                 modifier = Modifier.fillMaxWidth(0.8f),
-                singleLine = true,
-                keyboardType = KeyboardType.Number
+                keyboardType = KeyboardType.Number,
+                capitalization = KeyboardCapitalization.None
             )
+
 
 
             // ====== ZDJĘCIE (1 SLOT) ======
@@ -2173,19 +2284,22 @@ fun WodomierzeScreen(
 }
 
 @Composable
-private fun UnderlineInput(
+fun UnderlineInput(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
     modifier: Modifier = Modifier,
     singleLine: Boolean = true,
-    keyboardType: KeyboardType = KeyboardType.Text
+    keyboardType: KeyboardType = KeyboardType.Text,
+    hidePlaceholderWhenFocused: Boolean = false
 ) {
     val lineColor = if (value.trim().isNotEmpty()) {
         MaterialTheme.colorScheme.primary
     } else {
         MaterialTheme.colorScheme.outline
     }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
 
     Column(modifier = modifier) {
         TextField(
@@ -2193,22 +2307,15 @@ private fun UnderlineInput(
             onValueChange = onValueChange,
             singleLine = singleLine,
             modifier = Modifier.fillMaxWidth(),
+            interactionSource = interactionSource,
             placeholder = {
-                Text(
-                    text = placeholder,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Light
-                )
+                val hide = hidePlaceholderWhenFocused && isFocused
+                if (!hide && value.isBlank()) {
+                    Text(text = placeholder)
+                }
             },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Medium
-            ),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = keyboardType
-            ),
+            textStyle = MaterialTheme.typography.bodyLarge,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             colors = TextFieldDefaults.colors(
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
@@ -2220,6 +2327,7 @@ private fun UnderlineInput(
             )
         )
 
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2229,6 +2337,7 @@ private fun UnderlineInput(
         )
     }
 }
+
 
 @Composable
 fun ScreenTitleWithUnderline(
