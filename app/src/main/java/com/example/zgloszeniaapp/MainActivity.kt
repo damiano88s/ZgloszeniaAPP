@@ -137,13 +137,7 @@ import android.Manifest
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
-
-
-
-
-
-
-
+import androidx.compose.runtime.saveable.listSaver
 
 
 private const val PHOTOS_ENABLED = false //import wylacza zdjecia
@@ -435,6 +429,17 @@ fun AppScreen() {
     var wodPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
     var wodPhotoBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
+    var odsnAdres by rememberSaveable { mutableStateOf("") }
+    var odsnCzas by rememberSaveable { mutableStateOf("") }
+
+// zdjęcia: trzymamy ścieżki (bitmaps nie zapisujemy “na stałe”)
+    val odsnPhotoPaths = rememberSaveable(
+        saver = listSaver(
+            save = { it.toList() },
+            restore = { it.toMutableStateList() }
+        )
+    ) { mutableStateListOf<String>() }
+
 
     // kategorie gabarytów
     var catRozne by rememberSaveable { mutableStateOf(false) }
@@ -642,7 +647,22 @@ fun AppScreen() {
                     }
 
                     Screen.ODSNIEZANIE -> {
-                        OdsniezanieScreen(padding = padding)
+                        OdsniezanieScreen(
+                            padding = padding,
+                            adres = odsnAdres,
+                            onAdresChange = { odsnAdres = it },
+                            czas = odsnCzas,
+                            onCzasChange = { odsnCzas = it },
+                            photoPaths = odsnPhotoPaths,
+                            onClearAfterSend = {
+                                odsnAdres = ""
+                                odsnCzas = ""
+                                // usuń pliki + wyczyść listę
+                                odsnPhotoPaths.forEach { path -> runCatching { File(path).delete() } }
+                                odsnPhotoPaths.clear()
+                            }
+                        )
+
                     }
 
                     Screen.GRAFIK -> {

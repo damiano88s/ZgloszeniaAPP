@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,22 +34,37 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
+
 @Composable
-fun OdsniezanieScreen(padding: PaddingValues) {
+fun OdsniezanieScreen(
+    padding: PaddingValues,
+    adres: String,
+    onAdresChange: (String) -> Unit,
+    czas: String,
+    onCzasChange: (String) -> Unit,
+    photoPaths: SnapshotStateList<String>,
+    onClearAfterSend: () -> Unit
+) {
+
+
 
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val scroll = rememberScrollState()
 
     // ====== STANY ======
-    var adres by rememberSaveable { mutableStateOf("") }
-    var godziny by rememberSaveable { mutableStateOf("") }
+
+
+
+
 
     // wiele zdjęć
-    val photoPaths = remember { mutableStateListOf<String>() }
-    val photoBitmaps = remember { mutableStateListOf<Bitmap>() }
+
+
 
     var previewIndex by rememberSaveable { mutableIntStateOf(-1) } // -1 = brak podglądu
 
@@ -60,17 +76,12 @@ fun OdsniezanieScreen(padding: PaddingValues) {
     ) { success ->
         val path = pendingPhotoPath
         if (success && path != null) {
-            val bmp = decodeSampledBitmapFromFileRotated(path, maxSide = 2048)
-            if (bmp != null) {
-                photoPaths.add(path)
-                photoBitmaps.add(bmp)
-            } else {
-                runCatching { File(path).delete() }
-            }
+            photoPaths.add(path) // zapisujemy TYLKO ścieżkę
         } else {
             path?.let { runCatching { File(it).delete() } }
         }
         pendingPhotoPath = null
+
     }
 
     lateinit var takePhoto: () -> Unit
@@ -128,20 +139,20 @@ fun OdsniezanieScreen(padding: PaddingValues) {
             // ====== ADRES (jak wszędzie) ======
             AddressField(
                 value = adres,
-                onValueChange = { adres = it },
+                onValueChange = onAdresChange,
                 modifier = Modifier.fillMaxWidth(0.8f)
             )
 
-            // CZAS (jedno pole!)
+// ====== CZAS (jedno pole!) ======
             AddressFieldWithPlaceholder(
-                value = godziny,
+                value = czas,
                 onValueChange = { new ->
                     val filtered = new
                         .replace('.', ',')
                         .filter { it.isDigit() || it == ',' }
 
                     if (filtered.count { it == ',' } <= 1) {
-                        godziny = filtered.take(4) // 1,5 / 2 / 10,5
+                        onCzasChange(filtered.take(4)) // 1,5 / 2 / 10,5
                     }
                 },
                 placeholderText = "Czas",
@@ -151,7 +162,6 @@ fun OdsniezanieScreen(padding: PaddingValues) {
                 keyboardType = KeyboardType.Number,
                 capitalization = KeyboardCapitalization.None
             )
-
 
 
             Spacer(Modifier.height(8.dp))
@@ -171,20 +181,24 @@ fun OdsniezanieScreen(padding: PaddingValues) {
                 modifier = Modifier.wrapContentWidth()
             ) {
                 Text(
-                    text = if (photoBitmaps.isEmpty()) "Zrób zdjęcie" else "Dodaj kolejne zdjęcie",
-                    textAlign = TextAlign.Center
+                    text = if (photoPaths.isEmpty()) "Zrób zdjęcie" else "Dodaj kolejne zdjęcie"
                 )
+
             }
 
             // ====== MINIATURKI ======
-            if (photoBitmaps.isNotEmpty()) {
+            if (photoPaths.isNotEmpty()) {
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(0.9f),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
-                    itemsIndexed(photoBitmaps) { index, bmp ->
-                        Box {
+                    itemsIndexed(photoPaths) { index, path ->
+                        val bmp = remember(path) {
+                            decodeSampledBitmapFromFileRotated(path, maxSide = 512) // miniatura
+                        }
+
+                        if (bmp != null) {
                             Image(
                                 bitmap = bmp.asImageBitmap(),
                                 contentDescription = null,
@@ -194,37 +208,27 @@ fun OdsniezanieScreen(padding: PaddingValues) {
                                     .clickable { previewIndex = index },
                                 contentScale = ContentScale.Crop
                             )
-
-                            IconButton(
-                                onClick = {
-                                    photoPaths.getOrNull(index)
-                                        ?.let { runCatching { File(it).delete() } }
-
-                                    if (index in photoBitmaps.indices) photoBitmaps.removeAt(index)
-                                    if (index in photoPaths.indices) photoPaths.removeAt(index)
-
-                                    if (previewIndex == index) previewIndex = -1
-                                    if (previewIndex > index) previewIndex -= 1
-                                },
-                                modifier = Modifier.align(Alignment.TopEnd)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Usuń"
-                                )
-                            }
                         }
                     }
+
                 }
+
             }
 
             // ====== PODGLĄD FULLSCREEN (jeśli masz gotowy dialog) ======
-            if (previewIndex >= 0 && previewIndex < photoBitmaps.size) {
-                FullscreenImageDialog(
-                    bitmap = photoBitmaps[previewIndex],
-                    onClose = { previewIndex = -1 }
-                )
+            if (previewIndex >= 0 && previewIndex < photoPaths.size) {
+                val fullBmp = remember(previewIndex, photoPaths.toList()) {
+                    decodeSampledBitmapFromFileRotated(photoPaths[previewIndex], maxSide = 2048)
+                }
+
+                if (fullBmp != null) {
+                    FullscreenImageDialog(
+                        bitmap = fullBmp,
+                        onClose = { previewIndex = -1 }
+                    )
+                }
             }
+
 
             Spacer(Modifier.height(12.dp))
 
