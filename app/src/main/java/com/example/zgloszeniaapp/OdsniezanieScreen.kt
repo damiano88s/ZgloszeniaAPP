@@ -37,6 +37,12 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Delete
+
+
 
 
 @Composable
@@ -195,21 +201,55 @@ fun OdsniezanieScreen(
                 ) {
                     itemsIndexed(photoPaths) { index, path ->
                         val bmp = remember(path) {
-                            decodeSampledBitmapFromFileRotated(path, maxSide = 512) // miniatura
+                            decodeSampledBitmapFromFileRotated(path, maxSide = 512)
                         }
 
                         if (bmp != null) {
-                            Image(
-                                bitmap = bmp.asImageBitmap(),
-                                contentDescription = null,
+                            Box(
                                 modifier = Modifier
                                     .size(96.dp)
                                     .clip(MaterialTheme.shapes.medium)
-                                    .clickable { previewIndex = index },
-                                contentScale = ContentScale.Crop
-                            )
+                            ) {
+                                Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clickable { previewIndex = index },
+                                    contentScale = ContentScale.Crop
+                                )
+
+                                // 🗑️ USUŃ zdjęcie (czytelne dla usera)
+                                IconButton(
+                                    onClick = {
+                                        if (previewIndex == index) previewIndex = -1
+                                        else if (previewIndex > index) previewIndex -= 1
+
+                                        runCatching { File(path).delete() }
+                                        photoPaths.removeAt(index)
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                        .size(36.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                            shape = CircleShape
+                                        )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = "Usuń zdjęcie"
+                                    )
+                                }
+
+
+                            }
+
                         }
                     }
+
+
 
                 }
 
