@@ -138,6 +138,8 @@ import android.Manifest
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+
 
 
 private const val PHOTOS_ENABLED = false //import wylacza zdjecia
@@ -1797,6 +1799,10 @@ fun AddressFieldWithPlaceholder(
         MaterialTheme.colorScheme.outline
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+
     Column(modifier = modifier) {
 
         TextField(
@@ -1830,22 +1836,30 @@ fun AddressFieldWithPlaceholder(
                 onValueChange(finalText)
             },
             singleLine = true,
+            interactionSource = interactionSource,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 0.dp),
             placeholder = {
-                Text(
-                    text = placeholderText,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Light
-                )
+                val hidePlaceholder = (keyboardType == KeyboardType.Number) && isFocused && value.isEmpty()
+
+                if (!hidePlaceholder) {
+                    Text(
+                        text = placeholderText,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Light
+                    )
+                }
             },
+
             textStyle = MaterialTheme.typography.bodyLarge.copy(
                 fontSize = 22.sp,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                textAlign = if (keyboardType == KeyboardType.Number) TextAlign.Center else TextAlign.Start
             ),
+
             colors = TextFieldDefaults.colors(
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
@@ -1864,11 +1878,20 @@ fun AddressFieldWithPlaceholder(
 
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(3.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(lineColor)
-        )
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(if (keyboardType == KeyboardType.Number) 120.dp else Dp.Unspecified)
+                    .fillMaxWidth(if (keyboardType == KeyboardType.Number) 0f else 1f)
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(lineColor)
+            )
+        }
+
+
     }
 }
 
@@ -2141,12 +2164,15 @@ fun WodomierzeScreen(
                         .replace('.', ',')
                         .filter { it.isDigit() || it == ',' }
 
+                    // nie pozwól, żeby pierwszy znak był przecinkiem
+                    val noLeadingComma = if (filtered.startsWith(",")) filtered.drop(1) else filtered
+
                     // tylko jeden przecinek
-                    if (filtered.count { it == ',' } <= 1) {
-                        onStanChange(filtered)
+                    if (noLeadingComma.count { it == ',' } <= 1) {
+                        onStanChange(noLeadingComma)
                     }
                 },
-                placeholderText = "Stan",
+                placeholderText = "Stan [m³]",
                 modifier = Modifier.fillMaxWidth(0.8f),
                 keyboardType = KeyboardType.Number,
                 capitalization = KeyboardCapitalization.None
