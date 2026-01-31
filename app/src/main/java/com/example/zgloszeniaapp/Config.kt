@@ -7,15 +7,12 @@ object Config {
 
     // URL do Web App (koniecznie /exec)
     const val WEB_APP_URL =
-        "https://script.google.com/macros/s/AKfycbyeWKoKLjeTThnEhme_6BVUxBxvtZPXJdgMWccwFzWzShKfz3t-LJSLl2uNgT2lpqvy/exec"
+        "https://script.google.com/macros/s/AKfycbx9lXeWVaRiOy8ut_zlIZ5MXvCijF5Tudwsp9c-PC0bd-a7W1fKYv_1EX6LYUGohxf6/exec"
+
 
 
     // Token – zostaw taki, jak miałeś; jeśli nie używasz, może być pusty.
     const val SECRET_TOKEN = ""  // <- wstaw swój, jeżeli sprawdzasz go w Apps Script
 
-    // Wersja aplikacji – możesz wpisać ręcznie,
-    // albo pobrać z BuildConfig (jeśli masz włączone buildConfig = true).
-    const val APP_VERSION = "1.0.0"
-    // Alternatywa (jeśli chcesz z BuildConfig):
-    // val APP_VERSION: String get() = BuildConfig.VERSION_NAME
+
 }

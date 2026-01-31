@@ -139,6 +139,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import org.json.JSONArray
+import com.example.zgloszeniaapp.SheetsApi
+
+import kotlinx.coroutines.CoroutineScope
+
+import kotlinx.coroutines.launch
+
 
 
 
@@ -489,14 +496,7 @@ fun AppScreen() {
     var message by remember { mutableStateOf<String?>(null) }
     var showBanner by remember { mutableStateOf(false) }
 
-    fun clearWodomierze() {
-        wodAdres = ""
-        wodNumer = ""
-        wodStan = ""
-        wodPhotoPath?.let { runCatching { File(it).delete() } }
-        wodPhotoPath = null
-        wodPhotoBitmap = null
-    }
+
 
     LaunchedEffect(menuExpanded) {
         if (!menuExpanded && pendingScreen != null) {
@@ -531,7 +531,7 @@ fun AppScreen() {
             photoFile3Path?.let { runCatching { File(it).delete() } }
             photoFile3Path = null
 
-            clearWodomierze()
+
             context.clearDraft()
 
             kotlinx.coroutines.delay(3000)
@@ -638,19 +638,19 @@ fun AppScreen() {
                             onPhotoBitmapChange = { wodPhotoBitmap = it },
 
                             onAfterSendClear = {
-                                wodAdres = ""
-                                wodNumer = ""
-                                wodStan = ""
-                                wodPhotoPath?.let { runCatching { File(it).delete() } }
-                                wodPhotoPath = null
-                                wodPhotoBitmap = null
+                                // NIC TU NIE ROBIMY – czyszczenie jest w screenie
                             }
                         )
+
                     }
 
-                    Screen.ODSNIEZANIE -> {
+
+
+                            Screen.ODSNIEZANIE -> {
                         OdsniezanieScreen(
                             padding = padding,
+                            userName = userName,
+                            userId = userId,
                             adres = odsnAdres,
                             onAdresChange = { odsnAdres = it },
                             czas = odsnCzas,
@@ -659,13 +659,13 @@ fun AppScreen() {
                             onClearAfterSend = {
                                 odsnAdres = ""
                                 odsnCzas = ""
-                                // usuń pliki + wyczyść listę
                                 odsnPhotoPaths.forEach { path -> runCatching { File(path).delete() } }
                                 odsnPhotoPaths.clear()
                             }
                         )
-
                     }
+
+
 
                     Screen.GRAFIK -> {
                         GrafikScreen(
@@ -1414,26 +1414,34 @@ fun buildJsonWodomierze(
     photoBase64: String?,
     fileName: String?
 ): JSONObject = JSONObject().apply {
-    put("sekret", Config.SECRET_TOKEN) // jeśli nie używasz w Apps Script, może zostać
-    put("typ", "Wodomierze")
 
-    // Apps Script czyta: data.adres || data.ulica_adres
+    // ===== NOWE POLA dla nowego Apps Script =====
+    put("unit", "ZNT")             // na razie na sztywno
+    put("module", "TECH")
+    put("type", "WODOMIERZE")
+
+    put("user", user)
+    put("uuid", uuid)
     put("adres", adres)
-
-    // Apps Script czyta: data.nr_wodomierza
-    put("nr_wodomierza", numerWodomierza)
-
+    put("numerWodomierza", numerWodomierza)
     put("stan", stan)
+    put("appVersion", appVersion)
 
+    // ===== STARE POLA (zostawiamy, nie przeszkadzają) =====
+    put("sekret", Config.SECRET_TOKEN)
+    put("typ", "Wodomierze")
+    put("nr_wodomierza", numerWodomierza)
     put("uzytkownik", user)
     put("urz_uuid", uuid)
     put("wersja_apki", appVersion)
     put("timestamp_client", System.currentTimeMillis().toString())
 
-    // Apps Script wymaga: photo1 + fileName1
+    // zdjęcia: na razie zostawiamy jak było (backend je zignoruje),
+    // dopniemy upload do Drive jako osobny krok
     if (!photoBase64.isNullOrBlank()) put("photo1", photoBase64)
     if (!fileName.isNullOrBlank()) put("fileName1", fileName)
 }
+
 
 
 fun bitmapToBase64(bitmap: Bitmap): String {
@@ -1442,6 +1450,39 @@ fun bitmapToBase64(bitmap: Bitmap): String {
     val byteArray = outputStream.toByteArray()
     return Base64.encodeToString(byteArray, Base64.NO_WRAP)
 }
+
+fun buildJsonOdsniezanie(
+    adres: String,
+    czas: String,
+    user: String,
+    uuid: String,
+    appVersion: String,
+    photos: List<String>,
+    unit: String
+): JSONObject {
+    val json = JSONObject()
+
+    json.put("unit", unit)
+    json.put("module", "TECH")
+    json.put("type", "ODSNIEZANIE")
+
+    json.put("adres", adres)
+    json.put("czas", czas)
+    json.put("user", user)
+    json.put("uuid", uuid)
+    json.put("appVersion", appVersion)
+
+    val photosArray = JSONArray()
+    photos.forEach { encoded ->
+        photosArray.put(encoded)
+    }
+    json.put("photos", photosArray)
+
+    return json
+}
+
+
+
 
 @Composable
 fun PhotoSlot(
@@ -2027,7 +2068,18 @@ fun WodomierzeScreen(
     onPhotoBitmapChange: (Bitmap?) -> Unit,
 
     onAfterSendClear: () -> Unit
+
+
 ) {
+    fun clearWodomierze() {
+        onAdresChange("")
+        onNumerWodomierzaChange("")
+        onStanChange("")
+
+        photoPath?.let { runCatching { File(it).delete() } }
+        onPhotoPathChange(null)
+        onPhotoBitmapChange(null)
+    }
 
     val focusManager = LocalFocusManager.current
     val scroll = rememberScrollState()
@@ -2039,6 +2091,16 @@ fun WodomierzeScreen(
     var sendError by rememberSaveable { mutableStateOf<String?>(null) }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
     var showBanner by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(showBanner, sendError) {
+        if (showBanner || sendError != null) {
+            kotlinx.coroutines.delay(3000)
+            showBanner = false
+            message = null
+            sendError = null
+        }
+    }
+
 
 
     val vm = remember { SendVm() }
@@ -2101,12 +2163,7 @@ fun WodomierzeScreen(
                 stan.trim().isNotBlank() &&
                 photoBitmap != null
 
-    LaunchedEffect(showBanner, message) {
-        if (showBanner && message == "OK") {
-            delay(5000)
-            showBanner = false
-        }
-    }
+
 
 
 
@@ -2254,10 +2311,7 @@ fun WodomierzeScreen(
             Button(
                 enabled = canSave && !isSending,
                 onClick = {
-                    focusManager.clearFocus()   // ⬅️ TO DODAJESZ
-                    sendError = null
-                    isSending = true
-
+                    focusManager.clearFocus()
                     sendError = null
                     isSending = true
 
@@ -2267,54 +2321,54 @@ fun WodomierzeScreen(
 
                     val fileName = "wodomierz_${System.currentTimeMillis()}.jpg"
 
-                    val payload = buildJsonWodomierze(
-                        adres = adres.trim(),
-                        numerWodomierza = numerWodomierza.trim(),
-                        stan = stan.trim(),
-                        user = userName,
-                        uuid = userId,
-                        appVersion = Config.APP_VERSION,
-                        photoBase64 = photoB64,
-                        fileName = fileName
-                    )
+                    val api = SheetsApi(Config.WEB_APP_URL)
 
-                    vm.send(
-                        url = Config.WEB_APP_URL,
-                        payload = payload
-                    ) { ok, msg ->
-                        isSending = false
+                    // ⬇️ Tu wywołujemy Twoją nową funkcję — jako coroutine
+                    CoroutineScope(Dispatchers.Main).launch {
 
+                        try {
+                            val ok = api.sendWodomierz(
+                                userName = userName,
+                                userId = userId,
+                                wersjaApki = BuildConfig.VERSION_NAME,
+                                adres = adres.trim(),
+                                numerWodomierza = numerWodomierza.trim(),
+                                stan = stan.trim(),
+                                photoBase64 = photoB64,
+                                fileName = fileName
+                            )
 
-                        // msg to odpowiedź z Apps Script
-                        sendError = "RESP: $msg"
+                            isSending = false
 
-                        if (ok && msg.contains("\"status\":\"OK\"")) {
-                            onAfterSendClear()
-                            message = "OK"
-                            showBanner = true
-                            sendError = null
-                        } else {
-                            message = "ERR"
+                            if (ok) {
+                                clearWodomierze()      // ⬅️ TO DODAJE CZYSZCZENIE
+                                message = "OK"
+                                showBanner = true
+                                sendError = null
+                            } else {
+                                message = "ERR"
+                                showBanner = false
+                            }
+
+                        } catch (e: Exception) {
+                            isSending = false
+                            sendError = "Brak połączenia z serwerem"
+                            message = null
                             showBanner = false
                         }
 
                     }
 
                 }
+
             ) {
                 Text(if (isSending) "Wysyłam..." else "Wyślij")
             }
 
-            sendError?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
-            }
-
-
-
 
 
         }
-        if (showBanner && message == "OK") {
+        if (showBanner) {
             SuccessBanner(
                 "Wodomierz został wysłany",
                 modifier = Modifier
@@ -2325,8 +2379,33 @@ fun WodomierzeScreen(
             )
         }
 
+        if (sendError != null) {
+            ErrorBanner(
+                text = sendError!!,
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .align(Alignment.BottomCenter)
+                    .imePadding()
+                    .padding(bottom = 24.dp)
+            )
+        }
+
+
 
     }
+}
+fun clearWodomierze(
+    onAdresChange: (String) -> Unit,
+    onNumerWodomierzaChange: (String) -> Unit,
+    onStanChange: (String) -> Unit,
+    onPhotoPathChange: (String?) -> Unit,
+    onPhotoBitmapChange: (Bitmap?) -> Unit
+) {
+    onAdresChange("")
+    onNumerWodomierzaChange("")
+    onStanChange("")
+    onPhotoPathChange(null)
+    onPhotoBitmapChange(null)
 }
 
 @Composable
@@ -2458,6 +2537,28 @@ fun FullscreenImageDialog(
                 )
             }
         }
+    }
+}
+@Composable
+fun ErrorBanner(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .background(
+                color = MaterialTheme.colorScheme.error,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .padding(vertical = 14.dp, horizontal = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.onError,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+        )
     }
 }
 

@@ -2,6 +2,7 @@ package com.example.zgloszeniaapp
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,11 +38,15 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import java.io.File
+import kotlinx.coroutines.delay
+
 
 
 @Composable
 fun OdsniezanieScreen(
     padding: PaddingValues,
+    userName: String,
+    userId: String,
     adres: String,
     onAdresChange: (String) -> Unit,
     czas: String,
@@ -51,10 +56,37 @@ fun OdsniezanieScreen(
 ) {
 
 
+    val photos = remember { mutableStateListOf<Bitmap>() }
 
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val scroll = rememberScrollState()
+
+    var isSending by rememberSaveable { mutableStateOf(false) }
+    var sendError by rememberSaveable { mutableStateOf<String?>(null) }
+    var message by rememberSaveable { mutableStateOf<String?>(null) }
+    var showBanner by rememberSaveable { mutableStateOf(false) }
+
+    var photo1 by remember { mutableStateOf<Bitmap?>(null) }
+    var photo2 by remember { mutableStateOf<Bitmap?>(null) }
+    var photo3 by remember { mutableStateOf<Bitmap?>(null) }
+
+
+    val vm = remember { SendVm() }
+
+    val canSave =
+        userName.isNotBlank() &&
+                adres.trim().length >= 3 &&
+                czas.trim().isNotBlank() &&
+                !czas.trim().startsWith(",") &&
+                photoPaths.isNotEmpty() // na razie wymagamy min. 1 zdjęcia
+
+    LaunchedEffect(showBanner, message) {
+        if (showBanner && message == "OK") {
+            delay(5000)
+            showBanner = false
+        }
+    }
 
 
     val interactionSource = remember { MutableInteractionSource() }
@@ -148,7 +180,8 @@ fun OdsniezanieScreen(
                         .filter { it.isDigit() || it == ',' }
 
                     // nie pozwól, żeby pierwszy znak był przecinkiem
-                    val noLeadingComma = if (filtered.startsWith(",")) filtered.drop(1) else filtered
+                    val noLeadingComma =
+                        if (filtered.startsWith(",")) filtered.drop(1) else filtered
 
                     // max jeden przecinek
                     if (noLeadingComma.count { it == ',' } <= 1) {
@@ -245,7 +278,6 @@ fun OdsniezanieScreen(
                     }
 
 
-
                 }
 
             }
@@ -267,8 +299,79 @@ fun OdsniezanieScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            // (na razie bez "Wyślij" — dopniemy jak już UI będzie 100% OK)
+            Button(
+                enabled = canSave && !isSending,
+                onClick = {
+                    focusManager.clearFocus()
+                    sendError = null
+                    isSending = true
+
+                    val encodedPhotos = photoPaths.mapNotNull { path ->
+                        runCatching {
+                            fileToBase64Original(File(path))
+                        }.getOrNull()
+                    }
+
+
+                    val payload = buildJsonOdsniezanie(
+                        adres = adres.trim(),
+                        czas = czas.trim(),
+                        user = userName,
+                        uuid = userId,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        photos = encodedPhotos, // 👈 dynamiczna lista
+                        unit = "ZNT"
+                    )
+
+
+
+                    vm.send(
+                        url = Config.WEB_APP_URL,
+                        payload = payload
+                    ) { ok, msg ->
+                        isSending = false
+                        sendError = "RESP: $msg"
+
+                        if (ok && msg.contains("\"status\":\"OK\"")) {
+                            onClearAfterSend()
+                            message = "OK"
+                            showBanner = true
+                            sendError = null
+                        } else {
+                            message = "ERR"
+                            showBanner = false
+                        }
+                    }
+                }
+            ) {
+                Text(if (isSending) "Wysyłam..." else "Wyślij")
+            }
+
+            sendError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error)
+            }
+
+
+            if (showBanner && message == "OK") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp)
+                        .imePadding(),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    SuccessBanner(
+                        "Zgłoszenie zostało wysłane",
+                        modifier = Modifier.fillMaxWidth(0.9f)
+                    )
+                }
+            }
+
         }
     }
 }
+
+
+
+
 
