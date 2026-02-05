@@ -146,6 +146,11 @@ import kotlinx.coroutines.CoroutineScope
 
 import kotlinx.coroutines.launch
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+
+
 
 
 
@@ -180,7 +185,7 @@ class MainActivity : ComponentActivity() {
         }
 
         super.onCreate(savedInstanceState)
-
+        val appContext = this   // ✅ TO JEST CONTEXT
 
         // Czyść dane drafta przy każdym uruchomieniu aplikacji
         applicationContext.clearDraft()
@@ -214,9 +219,30 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ZgloszeniaAPPTheme(darkTheme = false) {
-                AppScreen()
+
+                //val context = LocalContext.current
+
+                var hasConfig by remember {
+                    mutableStateOf(
+                        UserPrefs.getUnity(appContext) != null &&
+                                !UserPrefs.getName(appContext).isNullOrBlank()
+                    )
+                }
+
+                if (!hasConfig) {
+                    SetupScreen(
+                        onFinished = {
+                            hasConfig = true
+                        }
+                    )
+
+                } else {
+                    AppScreen()
+                }
             }
         }
+
+
     }
 
     // ✅ TA FUNKCJA MA BYĆ TYLKO TU
@@ -319,9 +345,12 @@ enum class Screen {
 @Composable
 fun AppScreen() {
 
+    val context = LocalContext.current
+    val userId = UserPrefs.getOrCreateUuid(context)
+    val selectedUnity = UserPrefs.getUnity(context) ?: "ZNT"
     val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
-    val context = LocalContext.current
+
     LaunchedEffect(Unit) {
         GrafikCache.preload(context.applicationContext)
     }
@@ -409,8 +438,9 @@ fun AppScreen() {
 
     val draft = remember { context.loadDraft() }
 
-    var userName by rememberSaveable { mutableStateOf(UserPrefs.getName(context) ?: "") }
-    val userId = remember { UserPrefs.getOrCreateUuid(context) }
+    val currentUserName = remember { UserPrefs.getName(context) ?: "" }
+
+    // val userId = remember { UserPrefs.getOrCreateUuid(context) }
 
     var typ by rememberSaveable { mutableStateOf(draft.typ ?: Config.SHEET_GABARYTY) }
     var typPicked by rememberSaveable { mutableStateOf(false) }
@@ -435,8 +465,10 @@ fun AppScreen() {
     var wodAdres by rememberSaveable { mutableStateOf("") }
     var wodNumer by rememberSaveable { mutableStateOf("") }
     var wodStan by rememberSaveable { mutableStateOf("") }
+    var wodLicznikTyp by remember { mutableStateOf<MeterType?>(null) }
     var wodPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
     var wodPhotoBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
 
     var odsnAdres by rememberSaveable { mutableStateOf("") }
     var odsnCzas by rememberSaveable { mutableStateOf("") }
@@ -475,6 +507,7 @@ fun AppScreen() {
     ) { success ->
         if (success && photoFile1Path != null) {
             photoBitmap1 = decodeSampledBitmapFromFile(photoFile1Path!!, maxSide = 2048)
+            focusManager.clearFocus()
         }
     }
     val takePictureLauncher2 = rememberLauncherForActivityResult(
@@ -544,14 +577,7 @@ fun AppScreen() {
         }
     }
 
-    if (userName.isBlank()) {
-        NameDialog(
-            onSave = {
-                UserPrefs.setName(context, it)
-                userName = it
-            }
-        )
-    }
+
 
 
 
@@ -607,8 +633,8 @@ fun AppScreen() {
                             showBanner = showBanner,
                             onShowBanner = { showBanner = it },
 
-                            userName = userName,
-                            userId = userId,
+                            userName = currentUserName,
+                            userId = "NO_UUID",
 
                             photoFile1Path = photoFile1Path,
                             photoFile2Path = photoFile2Path,
@@ -619,11 +645,14 @@ fun AppScreen() {
                     Screen.WODOMIERZE -> {
                         WodomierzeScreen(
                             padding = padding,
-                            userName = userName,
+                            userName = currentUserName,
                             userId = userId,
 
                             adres = wodAdres,
                             onAdresChange = { wodAdres = it },
+
+                            licznikTyp = wodLicznikTyp,
+                            onLicznikTypChange = { wodLicznikTyp = it },
 
                             numerWodomierza = wodNumer,
                             onNumerWodomierzaChange = { wodNumer = it },
@@ -638,19 +667,26 @@ fun AppScreen() {
                             onPhotoBitmapChange = { wodPhotoBitmap = it },
 
                             onAfterSendClear = {
-                                // NIC TU NIE ROBIMY – czyszczenie jest w screenie
+                                wodAdres = ""
+                                wodNumer = ""
+                                wodStan = ""
+                                wodLicznikTyp = null
+                                wodPhotoPath = null
+                                wodPhotoBitmap = null
                             }
                         )
+
 
                     }
 
 
 
-                            Screen.ODSNIEZANIE -> {
+
+                    Screen.ODSNIEZANIE -> {
                         OdsniezanieScreen(
                             padding = padding,
-                            userName = userName,
-                            userId = userId,
+                            userName = currentUserName,
+                            userId = "NO_UUID",
                             adres = odsnAdres,
                             onAdresChange = { odsnAdres = it },
                             czas = odsnCzas,
@@ -713,7 +749,13 @@ fun AppScreen() {
                     ) {
 
                         DropdownMenuItem(
-                            text = { Text("Wodomierze") },
+                            text = {
+                                Text(
+                                    text = "Liczniki",
+                                    fontSize = 20.sp,              // ⬅️ TU
+                                    fontWeight = FontWeight.Normal // opcjonalnie
+                                )
+                            },
                             onClick = {
                                 menuExpanded = false
                                 android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -722,7 +764,13 @@ fun AppScreen() {
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Odśnieżanie") },
+                            text = {
+                                Text(
+                                    text = "Odśnieżanie",
+                                    fontSize = 20.sp,              // ⬅️ TU
+                                    fontWeight = FontWeight.Normal // opcjonalnie
+                                )
+                            },
                             onClick = {
                                 menuExpanded = false
                                 android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -731,12 +779,16 @@ fun AppScreen() {
                             }
                         )
 
-                        
-
 
 
                         DropdownMenuItem(
-                            text = { Text("Grafik") },
+                            text = {
+                                Text(
+                                    text = "Grafik",
+                                    fontSize = 20.sp,              // ⬅️ TU
+                                    fontWeight = FontWeight.Normal // opcjonalnie
+                                )
+                            },
                             onClick = {
                                 menuExpanded = false
                                 android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -784,7 +836,10 @@ fun ZgloszeniaScreen(
     photoFile2Path: String?,
     photoFile3Path: String?
 ) {
-    val scroll = rememberScrollState()
+        val context = LocalContext.current
+        val uuid = UserPrefs.getOrCreateUuid(context)
+
+        val scroll = rememberScrollState()
     val vm = remember { SendVm() }
 
     val hasOpis = opis.trim().isNotBlank()
@@ -975,30 +1030,33 @@ fun ZgloszeniaScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
             ) {
+                val enabledGabaryty =
+                    !isSending &&
+                            !showBanner &&
+                            userName.isNotBlank() &&
+                            adres.trim().length >= 3 &&
+                            (catRozne || catBio || catOpony)
+
+                val enabledZlecenia =
+                    !isSending &&
+                            !showBanner &&
+                            userName.isNotBlank() &&
+                            adres.trim().length >= 3 &&
+                            (hasOpis || hasPhoto)
                 Button(
                     enabled = when (typ) {
-                        Config.SHEET_GABARYTY ->
-                            !isSending &&
-                                    !showBanner &&
-                                    userName.isNotBlank() &&
-                                    adres.trim().length >= 3 &&
-                                    (catRozne || catBio || catOpony)
-
-                        Config.SHEET_ZLECENIA ->
-                            !isSending &&
-                                    !showBanner &&
-                                    userName.isNotBlank() &&
-                                    adres.trim().length >= 3 &&
-                                    (hasOpis || hasPhoto)
-
+                        Config.SHEET_GABARYTY -> enabledGabaryty
+                        Config.SHEET_ZLECENIA -> enabledZlecenia
                         else -> false
                     },
                     onClick = {
                         focusManager.clearFocus()
+
                         if (typ == null) {
                             onMessage("Zaznacz typ zgłoszenia")
                             return@Button
                         }
+
                         if (adres.trim().length < 3) {
                             onMessage("Podaj poprawny adres")
                             return@Button
@@ -1011,9 +1069,10 @@ fun ZgloszeniaScreen(
                                     return@Button
                                 }
                             }
+
                             Config.SHEET_ZLECENIA -> {
                                 if (!hasOpis && !hasPhoto) {
-                                    onMessage(if (PHOTOS_ENABLED) "Podaj opis lub dodaj zdjęcie" else "Podaj opis")
+                                    onMessage("Podaj opis lub dodaj zdjęcie")
                                     return@Button
                                 }
                             }
@@ -1027,6 +1086,7 @@ fun ZgloszeniaScreen(
                                 if (catOpony) parts.add("opony")
                                 parts.joinToString(", ")
                             }
+
                             Config.SHEET_ZLECENIA -> opis.trim()
                             else -> opis.trim()
                         }
@@ -1035,30 +1095,25 @@ fun ZgloszeniaScreen(
                         onMessage(null)
 
                         val payload = JSONObject().apply {
-                            put("sekret", Config.SECRET_TOKEN)
-                            put("typ", typ!!)
-                            put("ulica_adres", adres.trim())
-                            put("opis", finalOpis)
-                            put("uzytkownik", userName.trim())
-                            put("urz_uuid", userId)
-                            put("wersja_apki", BuildConfig.VERSION_NAME)
-                            put("timestamp_client", System.currentTimeMillis())
+                            put("unit", UserPrefs.getUnity(context) ?: "ZNT")
+                            put("module", "ZLEC")
 
-                            photoFile1Path?.let { path ->
-                                val f = File(path)
-                                put("photo1", fileToBase64Original(f))
-                                put("fileName1", f.name.ifBlank { "zdjecie1_${System.currentTimeMillis()}.jpg" })
-                            }
-                            photoFile2Path?.let { path ->
-                                val f = File(path)
-                                put("photo2", fileToBase64Original(f))
-                                put("fileName2", f.name.ifBlank { "zdjecie2_${System.currentTimeMillis()}.jpg" })
-                            }
-                            photoFile3Path?.let { path ->
-                                val f = File(path)
-                                put("photo3", fileToBase64Original(f))
-                                put("fileName3", f.name.ifBlank { "zdjecie3_${System.currentTimeMillis()}.jpg" })
-                            }
+                            put(
+                                "type",
+                                when (typ) {
+                                    Config.SHEET_GABARYTY -> "GABARYTY"
+                                    Config.SHEET_ZLECENIA -> "ZLECENIA"
+                                    else -> "ZLECENIA"
+                                }
+                            )
+
+                            put("user", userName.trim())
+                            put("adres", adres.trim())
+                            put("opis", finalOpis)
+
+                            put("uuid", userId)
+                            put("appVersion", BuildConfig.VERSION_NAME)
+                            put("timestamp_client", System.currentTimeMillis())
                         }
 
                         vm.send(
@@ -1066,14 +1121,27 @@ fun ZgloszeniaScreen(
                             payload = payload
                         ) { ok, msg ->
                             onIsSending(false)
-                            onMessage(if (ok) "OK" else "Błąd: $msg")
-                            onShowBanner(ok)
+
+                            if (ok) {
+                                onShowBanner(true)
+                                onMessage("OK")
+                            } else {
+                                onShowBanner(false)
+                                onMessage(msg)
+                            }
                         }
-                    },
-                    modifier = Modifier.wrapContentWidth()
+                    }
                 ) {
                     Text(if (isSending) "Wysyłanie..." else "Wyślij")
                 }
+
+
+
+
+
+
+
+
             }
 
             Spacer(Modifier.height(24.dp))
@@ -1281,34 +1349,6 @@ fun TypeTab(
         }
     }
 
-
-
-
-
-@Composable
-fun NameDialog(onSave: (String) -> Unit) {
-    var temp by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = { /* brak zamknięcia bez zapisu */ },
-        confirmButton = {
-            TextButton(
-                enabled = temp.trim().length >= 3,
-                onClick = { onSave(temp.trim()) }
-            ) { Text("Wyślij") }
-        },
-        title = { Text("Imię i nazwisko") },
-        text = {
-            OutlinedTextField(
-                value = temp,
-                onValueChange = { temp = it },
-                placeholder = { Text("np. Anna Kowalska") }
-            )
-        }
-    )
-}
-
-
-
 class SendVm : ViewModel() {
     private val client = OkHttpClient.Builder()
         .callTimeout(60, TimeUnit.SECONDS)
@@ -1381,185 +1421,79 @@ private suspend fun postJson(url: String, json: JSONObject): Pair<Boolean, Strin
 }
 
 
-
-fun buildJson(
-    typ: String,
-    ulicaAdres: String,
-    opis: String,
-    user: String,
-    uuid: String,
-    appVersion: String,
-    photoBase64: String?,         // <-- dodaj tu
-    fileName: String?             // <-- i tu
-): JSONObject = JSONObject().apply {
-    put("sekret", Config.SECRET_TOKEN)
-    put("typ", typ)
-    put("ulica_adres", ulicaAdres)
-    put("opis", opis)
-    put("uzytkownik", user)
-    put("urz_uuid", uuid)
-    put("wersja_apki", appVersion)
-    put("timestamp_client", System.currentTimeMillis())
-    if (photoBase64 != null) put("photo", photoBase64)
-    if (fileName != null) put("fileName", fileName)
-}
-
-fun buildJsonWodomierze(
-    adres: String,
-    numerWodomierza: String,
-    stan: String,
-    user: String,
-    uuid: String,
-    appVersion: String,
-    photoBase64: String?,
-    fileName: String?
-): JSONObject = JSONObject().apply {
-
-    // ===== NOWE POLA dla nowego Apps Script =====
-    put("unit", "ZNT")             // na razie na sztywno
-    put("module", "TECH")
-    put("type", "WODOMIERZE")
-
-    put("user", user)
-    put("uuid", uuid)
-    put("adres", adres)
-    put("numerWodomierza", numerWodomierza)
-    put("stan", stan)
-    put("appVersion", appVersion)
-
-    // ===== STARE POLA (zostawiamy, nie przeszkadzają) =====
-    put("sekret", Config.SECRET_TOKEN)
-    put("typ", "Wodomierze")
-    put("nr_wodomierza", numerWodomierza)
-    put("uzytkownik", user)
-    put("urz_uuid", uuid)
-    put("wersja_apki", appVersion)
-    put("timestamp_client", System.currentTimeMillis().toString())
-
-    // zdjęcia: na razie zostawiamy jak było (backend je zignoruje),
-    // dopniemy upload do Drive jako osobny krok
-    if (!photoBase64.isNullOrBlank()) put("photo1", photoBase64)
-    if (!fileName.isNullOrBlank()) put("fileName1", fileName)
-}
-
-
-
-fun bitmapToBase64(bitmap: Bitmap): String {
-    val outputStream = ByteArrayOutputStream()
-    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
-    val byteArray = outputStream.toByteArray()
-    return Base64.encodeToString(byteArray, Base64.NO_WRAP)
-}
-
 fun buildJsonOdsniezanie(
+    context: Context,
     adres: String,
     czas: String,
     user: String,
     uuid: String,
     appVersion: String,
-    photos: List<String>,
-    unit: String
+    photos: List<String>
 ): JSONObject {
-    val json = JSONObject()
 
-    json.put("unit", unit)
-    json.put("module", "TECH")
-    json.put("type", "ODSNIEZANIE")
+    val unit = UserPrefs.getUnity(context) ?: "ZNT"
+    Log.d("UNIT_CHECK", "UNIT wysyłany = $unit")
+    Log.d("JSON", "buildJsonOdsniezanie → UNIT = $unit")
 
-    json.put("adres", adres)
-    json.put("czas", czas)
-    json.put("user", user)
-    json.put("uuid", uuid)
-    json.put("appVersion", appVersion)
+    return JSONObject().apply {
+        put("unit", unit)
+        put("module", "TECH")
+        put("type", "ODSNIEZANIE")
 
-    val photosArray = JSONArray()
-    photos.forEach { encoded ->
-        photosArray.put(encoded)
+        put("adres", adres)
+        put("czas", czas)
+        put("user", user)
+        put("uuid", uuid)
+        put("appVersion", appVersion)
+
+        val photosArray = JSONArray()
+        photos.forEach { photosArray.put(it) }
+        put("photos", photosArray)
     }
-    json.put("photos", photosArray)
 
-    return json
 }
 
+// WODOMIERZE  ←⬅️⬅️⬅️ DODAJESZ TO
+// =====================
+fun buildJsonWodomierze(
+    context: Context,
+    adres: String,
+    numerWodomierza: String,
+    stan: String,
+    meterType: MeterType,
+    user: String,
+    uuid: String,
+    appVersion: String,
+    photoBase64: String?,
+    fileName: String?
+): JSONObject {
+
+    val unit = UserPrefs.getUnity(context) ?: "ZNT"
+    Log.d("JSON", "UNIT = '$unit'")
+
+    return JSONObject().apply {
+        put("unit", unit)
+        put("module", "TECH")
+        put("type", "WODOMIERZE")
+
+        put("adres", adres)
+        put("numerWodomierza", numerWodomierza)
+        put("stan", stan)
 
 
+        put("meterType", meterType?.name ?: "")
+        //put("meterType", meterType.name)
 
-@Composable
-fun PhotoSlot(
-    label: String,
-    bitmap: Bitmap?,
-    photoFilePath: String?,          // <-- ścieżka do pliku, NIE File
-    onTake: () -> Unit,
-    onRetake: () -> Unit,
-    onClear: () -> Unit
-) {
-    val context = LocalContext.current
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
+        put("user", user)
+        put("uuid", uuid)
+        put("appVersion", appVersion)
 
-        if (bitmap == null) {
-            Button(onClick = onTake, modifier = Modifier.fillMaxWidth()) {
-                Text("Zrób zdjęcie")
-            }
-        } else {
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-                    .clip(MaterialTheme.shapes.medium)
-                    .clickable {
-                        // pokaż pełny ekran jeśli mamy ścieżkę
-                        photoFilePath?.let { path ->
-                            val intent = Intent(context, PhotoViewActivity::class.java)
-                            intent.putExtra("photo_path", path)
-                            context.startActivity(intent)
-                        }
-                    },
-                contentScale = ContentScale.Crop
-            )
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Button(onClick = onRetake, modifier = Modifier.weight(1f)) { Text("Zmień") }
-                OutlinedButton(onClick = onClear, modifier = Modifier.weight(1f)) { Text("Usuń") }
-            }
+        if (!photoBase64.isNullOrBlank() && !fileName.isNullOrBlank()) {
+            put("photo1", photoBase64)
+            put("fileName1", fileName)
         }
     }
-
-
 }
-
-
-
-// Tworzy docelowy Uri w MediaStore – aparat zapisze tu PEŁNE zdjęcie (nie miniaturę).
-fun uriToBase64Jpeg(context: Context, uri: Uri): Pair<String, Bitmap?> {
-    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
-    Log.d("PHOTO_SIZE", "Photo size: ${bytes.size / 1024} KB")
-    val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-    val preview: Bitmap? = try {
-        if (Build.VERSION.SDK_INT >= 28) {
-            val src = ImageDecoder.createSource(context.contentResolver, uri)
-            ImageDecoder.decodeBitmap(src) { decoder, info, _ ->
-                val ow = info.size.width
-                val oh = info.size.height
-                val maxSide = 1280f
-                val scale = minOf(maxSide / ow, maxSide / oh, 1f)
-                val tw = (ow * scale).toInt().coerceAtLeast(1)
-                val th = (oh * scale).toInt().coerceAtLeast(1)
-                decoder.setTargetSize(tw, th)
-            }
-        } else null
-    } catch (e: Exception) {
-        Log.w("PHOTO_PREVIEW", "Preview decode failed: ${e.message}")
-        null
-    }
-    return base64 to preview
-}
-
 
 fun createImageFile(context: Context, fileName: String): File {
     val storageDir = context.cacheDir
@@ -2045,7 +1979,11 @@ fun OpisFieldUnderline(
     }
 }
 
-
+enum class MeterType {
+    WODA,
+    GAZ,
+    PRAD
+}
 @Composable
 fun WodomierzeScreen(
     padding: PaddingValues,
@@ -2054,6 +1992,9 @@ fun WodomierzeScreen(
 
     adres: String,
     onAdresChange: (String) -> Unit,
+
+    licznikTyp: MeterType?,
+    onLicznikTypChange: (MeterType?) -> Unit,
 
     numerWodomierza: String,
     onNumerWodomierzaChange: (String) -> Unit,
@@ -2068,9 +2009,8 @@ fun WodomierzeScreen(
     onPhotoBitmapChange: (Bitmap?) -> Unit,
 
     onAfterSendClear: () -> Unit
-
-
-) {
+)
+ {
     fun clearWodomierze() {
         onAdresChange("")
         onNumerWodomierzaChange("")
@@ -2087,10 +2027,19 @@ fun WodomierzeScreen(
     var showPhotoPreview by remember { mutableStateOf(false) }
 
 
+
     var isSending by rememberSaveable { mutableStateOf(false) }
     var sendError by rememberSaveable { mutableStateOf<String?>(null) }
     var message by rememberSaveable { mutableStateOf<String?>(null) }
     var showBanner by rememberSaveable { mutableStateOf(false) }
+
+
+     val canSave =
+         userName.isNotBlank() &&
+                 adres.trim().length >= 3 &&
+                 numerWodomierza.trim().isNotBlank() &&
+                 stan.trim().isNotBlank() &&
+                 licznikTyp != null
 
     LaunchedEffect(showBanner, sendError) {
         if (showBanner || sendError != null) {
@@ -2109,6 +2058,8 @@ fun WodomierzeScreen(
     val takePictureLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
+        focusManager.clearFocus()   // ⬅️ TO CHOWA KLAWIATURĘ
+
         if (success && photoPath != null) {
             onPhotoBitmapChange(decodeSampledBitmapFromFileRotated(photoPath, maxSide = 2048))
         }
@@ -2117,6 +2068,7 @@ fun WodomierzeScreen(
 
     // Aparat: prosimy o uprawnienie i dopiero wtedy odpalamy TakePicture
     val context = LocalContext.current
+    val uuid = UserPrefs.getOrCreateUuid(context)
     lateinit var takePhoto: () -> Unit
 
 
@@ -2156,43 +2108,61 @@ fun WodomierzeScreen(
     }
 
 
-    val canSave =
-        userName.isNotBlank() &&
-                adres.trim().length >= 3 &&
-                numerWodomierza.trim().isNotBlank() &&
-                stan.trim().isNotBlank() &&
-                photoBitmap != null
+
+
+     Box(
+         modifier = Modifier
+             .fillMaxSize()
+             .padding(padding)
+     ) {
+
+         ZntLogoBackground(
+             modifier = Modifier
+                 .align(Alignment.BottomCenter)
+         )
+
+         Column(
+             modifier = Modifier
+                 .fillMaxSize()
+                 .padding(16.dp)
+                 .verticalScroll(scroll)
+                 .imePadding(),
+             verticalArrangement = Arrangement.spacedBy(12.dp),
+             horizontalAlignment = Alignment.CenterHorizontally
+         ) {
 
 
 
-
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
-    )
-
-    {
-
-        ZntLogoBackground(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 0.dp)
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-                .verticalScroll(scroll)
-                .imePadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            ScreenTitleWithUnderline(title = "WODOMIERZE")
+            ScreenTitleWithUnderline(title = "LICZNIKI")
             Spacer(Modifier.height(16.dp))
+
+            // ===== WYBÓR TYPU LICZNIKA (jak ZLECENIA / GABARYTY) =====
+             Row(
+                 modifier = Modifier
+                     .fillMaxWidth()
+                     .padding(vertical = 4.dp),
+                 horizontalArrangement = Arrangement.SpaceEvenly
+             ) {
+                 MeterTab(
+                     label = "WODA",
+                     selected = licznikTyp == MeterType.WODA,
+                     onClick = { onLicznikTypChange(MeterType.WODA) }
+                 )
+                 MeterTab(
+                     label = "GAZ",
+                     selected = licznikTyp == MeterType.GAZ,
+                     onClick = { onLicznikTypChange(MeterType.GAZ) }
+                 )
+                 MeterTab(
+                     label = "PRĄD",
+                     selected = licznikTyp == MeterType.PRAD,
+                     onClick = { onLicznikTypChange(MeterType.PRAD) }
+                 )
+             }
+
+
+             Spacer(Modifier.height(12.dp))
+
 
             AddressField(
                 value = adres,
@@ -2204,10 +2174,11 @@ fun WodomierzeScreen(
 
 
 
+
             AddressFieldWithPlaceholder(
                 value = numerWodomierza,
                 onValueChange = onNumerWodomierzaChange,
-                placeholderText = "Numer wodomierza",
+                placeholderText = "Numer licznika",
                 modifier = Modifier.fillMaxWidth(0.8f),
                 keyboardType = KeyboardType.Text,
                 capitalization = KeyboardCapitalization.None
@@ -2229,7 +2200,7 @@ fun WodomierzeScreen(
                         onStanChange(noLeadingComma)
                     }
                 },
-                placeholderText = "Stan [m³]",
+                placeholderText = "Stan",
                 modifier = Modifier.fillMaxWidth(0.8f),
                 keyboardType = KeyboardType.Number,
                 capitalization = KeyboardCapitalization.None
@@ -2258,7 +2229,7 @@ fun WodomierzeScreen(
                     modifier = Modifier.wrapContentWidth()
                 ) {
                     Text(
-                        "Zrób zdjęcie wodomierza",
+                        "Zrób zdjęcie licznika",
                         textAlign = TextAlign.Center
                     )
                 }
@@ -2311,6 +2282,7 @@ fun WodomierzeScreen(
             Button(
                 enabled = canSave && !isSending,
                 onClick = {
+
                     focusManager.clearFocus()
                     sendError = null
                     isSending = true
@@ -2326,29 +2298,53 @@ fun WodomierzeScreen(
                     // ⬇️ Tu wywołujemy Twoją nową funkcję — jako coroutine
                     CoroutineScope(Dispatchers.Main).launch {
 
+                        // ✅ WALIDACJA NA START – TYLKO TU
+                        if (licznikTyp == null) {
+                            isSending = false
+                            sendError = "Wybierz typ licznika"
+                            showBanner = false
+                            return@launch
+                        }
+
+                        // val meter = wodLicznikTyp ?: return@launch
+
                         try {
-                            val ok = api.sendWodomierz(
-                                userName = userName,
-                                userId = userId,
-                                wersjaApki = BuildConfig.VERSION_NAME,
+                            val payload = buildJsonWodomierze(
+                                context = context,
                                 adres = adres.trim(),
                                 numerWodomierza = numerWodomierza.trim(),
                                 stan = stan.trim(),
+                                meterType = licznikTyp,
+                                user = userName,
+                                uuid = userId,
+                                appVersion = BuildConfig.VERSION_NAME,
                                 photoBase64 = photoB64,
                                 fileName = fileName
                             )
 
-                            isSending = false
+                            vm.send(
+                                url = Config.WEB_APP_URL,
+                                payload = payload
+                            ) { ok, msg ->
+                                isSending = false
 
-                            if (ok) {
-                                clearWodomierze()      // ⬅️ TO DODAJE CZYSZCZENIE
-                                message = "OK"
-                                showBanner = true
-                                sendError = null
-                            } else {
-                                message = "ERR"
-                                showBanner = false
+                                if (ok && msg.contains("\"status\":\"OK\"")) {
+                                    onAfterSendClear()
+                                    onLicznikTypChange(null)
+                                    message = "OK"
+                                    showBanner = true
+                                    sendError = null
+                                } else {
+                                    message = "ERR"
+                                    showBanner = false
+                                }
                             }
+
+
+
+
+
+
 
                         } catch (e: Exception) {
                             isSending = false
@@ -2370,7 +2366,7 @@ fun WodomierzeScreen(
         }
         if (showBanner) {
             SuccessBanner(
-                "Wodomierz został wysłany",
+                "Licznik został wysłany",
                 modifier = Modifier
                     .fillMaxWidth(0.9f)
                     .align(Alignment.BottomCenter)
@@ -2378,6 +2374,9 @@ fun WodomierzeScreen(
                     .padding(bottom = 24.dp)
             )
         }
+
+
+
 
         if (sendError != null) {
             ErrorBanner(
@@ -2559,6 +2558,68 @@ fun ErrorBanner(
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center
         )
+    }
+}
+
+@Composable
+fun MeterTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val activeColor = MaterialTheme.colorScheme.primary
+    val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    var textWidthPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+
+    val underlineWidth = remember(textWidthPx, density.density) {
+        (textWidthPx / density.density).dp
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(vertical = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier.height(28.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                fontSize = 22.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Light,
+                color = if (selected) activeColor else inactiveColor,
+                onTextLayout = { result ->
+                    textWidthPx = result.size.width
+                }
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .height(8.dp)
+                .width(underlineWidth),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .height(3.dp) // ⬅️ IDENTYCZNA GRUBOŚĆ jak w zgłoszeniach
+                        .fillMaxWidth()
+                        .background(
+                            activeColor,
+                            RoundedCornerShape(2.dp)
+                        )
+                )
+            }
+        }
     }
 }
 

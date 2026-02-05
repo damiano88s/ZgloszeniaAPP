@@ -3,6 +3,7 @@ package com.example.zgloszeniaapp
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -55,10 +56,11 @@ fun OdsniezanieScreen(
     onClearAfterSend: () -> Unit
 ) {
 
-
+    val context = LocalContext.current
+    val uuid = UserPrefs.getOrCreateUuid(context)
     val photos = remember { mutableStateListOf<Bitmap>() }
 
-    val context = LocalContext.current
+
     val focusManager = LocalFocusManager.current
     val scroll = rememberScrollState()
 
@@ -104,13 +106,15 @@ fun OdsniezanieScreen(
     ) { success ->
         val path = pendingPhotoPath
         if (success && path != null) {
-            photoPaths.add(path) // zapisujemy TYLKO ścieżkę
+            photoPaths.add(path)
+
+            focusManager.clearFocus() // ⬅️ KLUCZOWA LINIA
         } else {
             path?.let { runCatching { File(it).delete() } }
         }
         pendingPhotoPath = null
-
     }
+
 
     lateinit var takePhoto: () -> Unit
 
@@ -301,34 +305,32 @@ fun OdsniezanieScreen(
 
             Button(
                 enabled = canSave && !isSending,
-                onClick = {
+                onClick = {                    // ← onClick {
                     focusManager.clearFocus()
                     sendError = null
                     isSending = true
 
-                    val encodedPhotos = photoPaths.mapNotNull { path ->
+                    val encodedPhotos = photoPaths.mapNotNull { path ->   // ← mapNotNull {
                         runCatching {
                             fileToBase64Original(File(path))
                         }.getOrNull()
-                    }
-
+                    }                                                      // ← } mapNotNull
 
                     val payload = buildJsonOdsniezanie(
+                        context = context,
                         adres = adres.trim(),
                         czas = czas.trim(),
                         user = userName,
                         uuid = userId,
                         appVersion = BuildConfig.VERSION_NAME,
-                        photos = encodedPhotos, // 👈 dynamiczna lista
-                        unit = "ZNT"
+                        photos = encodedPhotos
                     )
-
-
 
                     vm.send(
                         url = Config.WEB_APP_URL,
                         payload = payload
-                    ) { ok, msg ->
+                    ) { ok, msg ->               // ← callback {
+                        Log.e("API_RESPONSE", "OK=$ok MSG=$msg")
                         isSending = false
                         sendError = "RESP: $msg"
 
@@ -341,9 +343,12 @@ fun OdsniezanieScreen(
                             message = "ERR"
                             showBanner = false
                         }
-                    }
-                }
-            ) {
+                    }                             // ← } callback
+                }                                 // ← } onClick
+            )                                     // ← ) Button
+
+
+            {
                 Text(if (isSending) "Wysyłam..." else "Wyślij")
             }
 
